@@ -89,9 +89,9 @@ REDIS_PASSWORD=change_me
 
 不要把 `.env`、模型密钥或真实用户数据提交到版本库。
 
-### 2. 启动服务端（Docker 学习模式）
+### 2. Docker 构建状态
 
-当前仓库刻意不包含 Docker 构建或编排文件。完成 Docker 学习步骤并重新建立依赖服务后，再启动 FastAPI 并进行以下验证。
+本目录已包含后端镜像定义 `Dockerfile` 与构建上下文规则 `.dockerignore`。仓库根目录的 `compose.yaml` 当前编排前端 Nginx、后端、Redis 和 ChromaDB。
 
 ### 3. 验证并发起第一轮对话
 

@@ -80,3 +80,7 @@ npm run dev
 ## 后端启动参考
 
 Python 后端默认地址为 `http://localhost:8000`，启动后即可连接前端工作台。
+
+## Docker 运行
+
+仓库根目录的 `compose.yaml` 会将此前端构建为静态文件，并由 Nginx 在 `http://localhost:8080` 提供页面。浏览器对 `/api/python/*` 的请求会由 Nginx 转发到 Docker 内网中的 Python 后端；前端不会写入容器 IP 或真实密钥。

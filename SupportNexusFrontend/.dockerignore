@@ -1,0 +1,16 @@
+# 构建环境会根据 package-lock.json 重新安装依赖。
+node_modules/
+dist/
+
+# 前端镜像不应携带本机配置、Git 元数据或编辑器文件。
+.env
+.env.*
+!.env.example
+.git/
+.idea/
+.vscode/
+*.log
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

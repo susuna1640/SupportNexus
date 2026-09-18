@@ -1,0 +1,33 @@
+# 本机密钥与环境配置绝不能进入镜像构建上下文。
+.env
+.env.*
+!.env.example
+
+# 本地运行状态：应由后续的 Docker volume 或外部服务持久化。
+data/chroma/
+data/user_memories/
+data/eval/
+logs/
+outputs/
+*.sqlite3
+*.inspect.ndjson
+
+# Python 依赖、测试缓存与构建产物会在容器内重新生成。
+.venv*/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+coverage/
+htmlcov/
+tests/
+
+# Git、编辑器和操作系统文件与应用运行无关。
+.git/
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
