@@ -1,0 +1,40 @@
+# Environment files and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
+# Python environments and generated files
+.venv*/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+coverage/
+htmlcov/
+
+# Node dependencies and build output
+node_modules/
+dist/
+build/
+
+# Local application state and generated evaluation artifacts
+data/
+logs/
+outputs/
+*.sqlite3
+*.inspect.ndjson
+
+# Editor and operating-system files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

@@ -1,0 +1,39 @@
+#!/bin/sh
+# 拦截常见密钥文件与高置信度凭据模式；不会打印匹配到的具体内容。
+set -eu
+
+blocked_files="$(
+  git diff --cached --name-only --diff-filter=ACMR |
+    perl -ne '
+      chomp;
+      next if m{(?:^|/)\.env\.example$}i;
+      if (m{(?:^|/)\.env(?:[._-].*)?$}i ||
+          m{(?:^|/)(?:id_rsa|id_ed25519|.*\.(?:pem|key|p12|pfx))$}i) {
+        print "$_\n";
+      }
+    '
+)"
+
+if [ -n "$blocked_files" ]; then
+  printf '%s\n%s\n' \
+    '提交已阻止：暂存区包含可能保存凭据的文件：' \
+    "$blocked_files" >&2
+  printf '%s\n' '请改用 .env.example 或从暂存区移除该文件。' >&2
+  exit 1
+fi
+
+if git diff --cached --no-color --unified=0 |
+  perl -ne '
+    BEGIN { $found = 0 }
+    next unless /^\+(?!\+\+)/;
+    $found = 1 if
+      /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/ ||
+      /(?:sk-ant-|sk-|AIza|gh[pousr]_|github_pat_|AKIA|xox[baprs]-)[A-Za-z0-9_-]{16,}/ ||
+      /\b(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD)[[:space:]]*[:=][[:space:]]*["\047][^"\047]{8,}/i ||
+      /\bAuthorization[[:space:]]*:[[:space:]]*Bearer[[:space:]]+[A-Za-z0-9._-]{20,}/i;
+    END { exit($found ? 0 : 1) }
+  '
+then
+  printf '%s\n' '提交已阻止：暂存内容疑似含有密钥或凭据。请改用环境变量。' >&2
+  exit 1
+fi
