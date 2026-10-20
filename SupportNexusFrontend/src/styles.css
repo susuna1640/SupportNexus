@@ -464,6 +464,51 @@ a { color: inherit; }
 .message-markdown > :first-child { margin-top: 0; }
 .message-markdown > :last-child { margin-bottom: 0; }
 .message-markdown p { margin: 8px 0; }
+.stream-placeholder { color: var(--muted); font-style: italic; }
+
+.process-timeline {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid rgba(111, 120, 247, 0.24);
+  border-radius: 10px;
+  background: rgba(111, 120, 247, 0.06);
+}
+
+.process-title {
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.process-event {
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: #dce2f6;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.process-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(111, 120, 247, 0.13);
+}
+
+.process-event.tool_start .process-dot { background: #e6c36a; box-shadow: 0 0 0 3px rgba(230, 195, 106, 0.13); }
+.process-event.tool_end .process-dot,
+.process-event.agent_end .process-dot { background: var(--green); box-shadow: 0 0 0 3px rgba(66, 202, 156, 0.13); }
+.process-event.failed .process-dot,
+.process-event.error .process-dot { background: #f37a82; box-shadow: 0 0 0 3px rgba(243, 122, 130, 0.13); }
+.process-event small { color: var(--muted); font-size: 10px; white-space: nowrap; }
 .message-markdown h1,
 .message-markdown h2,
 .message-markdown h3,
@@ -553,6 +598,8 @@ a { color: inherit; }
   display: grid;
   gap: 10px;
 }
+
+.trace-call-caption { margin-top: 7px; color: var(--muted); font-size: 11px; }
 
 .trace-calls details,
 .trace-call-item {

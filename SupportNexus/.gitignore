@@ -12,8 +12,12 @@ venv/
 .env.*
 !.env.example
 
-# 数据目录
-data/
+# 数据目录：正式 E2E 评测集需要随源码版本化；运行期状态仍不提交。
+data/*
+!data/eval/
+data/eval/*
+!data/eval/e2e_quality_cases_v1.json
+!data/eval/e2e_quality_rubric_v1.json
 logs/
 
 # IDE

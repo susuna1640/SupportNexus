@@ -24,7 +24,7 @@ from collections import deque
 from datetime import datetime
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from anthropic import AsyncAnthropic
 
@@ -43,6 +43,70 @@ from core.llm_utils import extract_text_content
 from core.observability import capture, observation, update, usage_details
 
 logger = logging.getLogger(__name__)
+
+
+StreamEventCallback = Callable[[str, Dict[str, Any]], Awaitable[None]]
+
+
+async def _emit_stream_event(
+    callback: Optional[StreamEventCallback],
+    event: str,
+    payload: Dict[str, Any],
+) -> None:
+    """Send a request-scoped UI event when the caller opted into streaming."""
+    if callback is not None:
+        await callback(event, payload)
+
+
+async def _create_message(
+    client: AsyncAnthropic,
+    request_kwargs: Dict[str, Any],
+    *,
+    stream_text: bool = False,
+    event_callback: Optional[StreamEventCallback] = None,
+) -> Any:
+    """Create an Anthropic-compatible message, optionally forwarding safe text deltas.
+
+    Some compatible providers expose only ``messages.create``. That remains a
+    useful SSE fallback: lifecycle events still arrive in real time and the
+    completed text is emitted as one delta.
+    """
+    if not stream_text:
+        return await client.messages.create(**request_kwargs)
+
+    stream_method = getattr(client.messages, "stream", None)
+    if not callable(stream_method):
+        response = await client.messages.create(**request_kwargs)
+        text = extract_text_content(getattr(response, "content", None))
+        if text:
+            await _emit_stream_event(event_callback, "delta", {"text": text})
+        return response
+
+    emitted_text = False
+    try:
+        async with stream_method(**request_kwargs) as stream:
+            async for text in stream.text_stream:
+                if text:
+                    emitted_text = True
+                    await _emit_stream_event(event_callback, "delta", {"text": text})
+            response = await stream.get_final_message()
+        if not emitted_text:
+            text = extract_text_content(getattr(response, "content", None))
+            if text:
+                await _emit_stream_event(event_callback, "delta", {"text": text})
+        return response
+    except Exception as ex:
+        # Providers that implement the Messages API but not its streaming mode
+        # should still complete a chat request. Do not retry once text has been
+        # shown: that could duplicate a partially generated answer.
+        if emitted_text:
+            raise
+        logger.warning("模型流式响应不可用，回退为完整响应: %s", ex)
+        response = await client.messages.create(**request_kwargs)
+        text = extract_text_content(getattr(response, "content", None))
+        if text:
+            await _emit_stream_event(event_callback, "delta", {"text": text})
+        return response
 
 
 # ── 数据结构 ──────────────────────────────────────────────────────────────────
@@ -279,17 +343,41 @@ class BaseAgent:
     def set_memory_manager(self, memory_manager: Optional[Any]) -> None:
         self._memory_manager = memory_manager
 
-    async def handle(self, req: Request) -> AgentResponse:
+    async def handle(
+        self,
+        req: Request,
+        event_callback: Optional[StreamEventCallback] = None,
+        stream_text: bool = False,
+    ) -> AgentResponse:
         t0 = time.monotonic()
         self.stats.total += 1
         self._last_tools_used = []
         self._last_tool_traces = []
         context_usage: Optional[ContextWindowUsage] = None
+        await _emit_stream_event(
+            event_callback,
+            "agent_start",
+            {"agent_type": self.agent_type.value, "message": f"正在运行 {self.agent_type.value} Agent"},
+        )
         try:
-            content, context_usage = await self._call_llm(req)
+            content, context_usage = await self._call_llm(
+                req,
+                event_callback=event_callback,
+                stream_text=stream_text,
+            )
             ms = (time.monotonic() - t0) * 1000
             self.stats.success += 1
             self.stats.total_ms += ms
+            await _emit_stream_event(
+                event_callback,
+                "agent_end",
+                {
+                    "agent_type": self.agent_type.value,
+                    "success": True,
+                    "latency_ms": round(ms, 1),
+                    "message": f"{self.agent_type.value} Agent 已完成",
+                },
+            )
             return AgentResponse(
                 agent_type=self.agent_type,
                 content=content,
@@ -303,6 +391,16 @@ class BaseAgent:
             ms = (time.monotonic() - t0) * 1000
             self.stats.total_ms += ms
             logger.error(f"{self.agent_type.value} 处理失败: {ex}")
+            await _emit_stream_event(
+                event_callback,
+                "agent_end",
+                {
+                    "agent_type": self.agent_type.value,
+                    "success": False,
+                    "latency_ms": round(ms, 1),
+                    "message": f"{self.agent_type.value} Agent 未能完成",
+                },
+            )
             return AgentResponse(
                 agent_type=self.agent_type,
                 content="抱歉，处理您的请求时出现问题，请稍后重试。",
@@ -312,7 +410,13 @@ class BaseAgent:
                 context_usage=context_usage,
             )
 
-    async def _call_llm(self, req: Request) -> Tuple[str, Optional[ContextWindowUsage]]:
+    async def _call_llm(
+        self,
+        req: Request,
+        *,
+        event_callback: Optional[StreamEventCallback] = None,
+        stream_text: bool = False,
+    ) -> Tuple[str, Optional[ContextWindowUsage]]:
         messages = self._build_messages(req)
         tools = self._tools_for_request()
         tool_payloads = self._tool_payloads(tools)
@@ -343,7 +447,12 @@ class BaseAgent:
                 },
             ) as generation:
                 try:
-                    resp = await self._client.messages.create(**request_kwargs)
+                    resp = await _create_message(
+                        self._client,
+                        request_kwargs,
+                        stream_text=stream_text,
+                        event_callback=event_callback,
+                    )
                 except Exception as ex:
                     update(generation, output={"error": capture(str(ex))})
                     raise
@@ -365,6 +474,7 @@ class BaseAgent:
             )
             if not tool_uses:
                 self._last_tools_used = tools_used
+                self._last_tool_traces = tool_traces
                 return extract_text_content(resp.content), context_usage
 
             messages.append({"role": "assistant", "content": resp.content})
@@ -378,6 +488,15 @@ class BaseAgent:
                 call_success = True
                 result_success: Optional[bool] = None
                 error_text = ""
+                await _emit_stream_event(
+                    event_callback,
+                    "tool_start",
+                    {
+                        "agent_type": self.agent_type.value,
+                        "tool_name": name,
+                        "message": f"正在调用 {name}",
+                    },
+                )
                 with observation(
                     f"{self.agent_type.value}-tool-{name}",
                     as_type="tool",
@@ -404,6 +523,20 @@ class BaseAgent:
                 tool_latency_ms = (time.monotonic() - tool_t0) * 1000
                 if not error_text and isinstance(result, dict):
                     error_text = str(result.get("error", "") or "")
+                await _emit_stream_event(
+                    event_callback,
+                    "tool_end",
+                    {
+                        "agent_type": self.agent_type.value,
+                        "tool_name": name,
+                        "success": call_success,
+                        "result_success": result_success,
+                        "latency_ms": round(tool_latency_ms, 1),
+                        "cached": bool(result.get("cached")) if isinstance(result, dict) else False,
+                        "reranked": bool(result.get("reranked")) if isinstance(result, dict) else False,
+                        "message": f"{name} {'已完成' if call_success else '未能完成'}",
+                    },
+                )
                 update(
                     tool_observation,
                     output={
@@ -965,12 +1098,24 @@ class ResponseComposer:
         self._model = model
         self._skill_manager = skill_manager
 
-    async def compose(self, req: Request, responses: List[AgentResponse]) -> str:
+    async def compose(
+        self,
+        req: Request,
+        responses: List[AgentResponse],
+        event_callback: Optional[StreamEventCallback] = None,
+        stream_text: bool = False,
+    ) -> str:
         successful = [response for response in responses if response.success and response.content.strip()]
         if not successful:
-            return "抱歉，所有 Agent 均处理失败。"
+            content = "抱歉，所有 Agent 均处理失败。"
+            if stream_text:
+                await _emit_stream_event(event_callback, "delta", {"text": content})
+            return content
         if len(successful) == 1:
-            return successful[0].content
+            content = successful[0].content
+            if stream_text:
+                await _emit_stream_event(event_callback, "delta", {"text": content})
+            return content
 
         evidence = "\n\n".join(
             f"[{response.agent_type.value} Agent 输出]\n{response.content}"
@@ -992,11 +1137,16 @@ class ResponseComposer:
                 model=self._model,
                 input={"messages": [{"role": "user", "content": capture(prompt)}]},
             ) as generation:
-                response = await self._client.messages.create(
-                    model=self._model,
-                    max_tokens=max(256, _env_int("SUPPORT_NEXUS_COMPOSER_MAX_TOKENS", 2048)),
-                    temperature=_env_float("SUPPORT_NEXUS_COMPOSER_TEMPERATURE", 0.1),
-                    messages=[{"role": "user", "content": prompt}],
+                response = await _create_message(
+                    self._client,
+                    {
+                        "model": self._model,
+                        "max_tokens": max(256, _env_int("SUPPORT_NEXUS_COMPOSER_MAX_TOKENS", 2048)),
+                        "temperature": _env_float("SUPPORT_NEXUS_COMPOSER_TEMPERATURE", 0.1),
+                        "messages": [{"role": "user", "content": prompt}],
+                    },
+                    stream_text=stream_text,
+                    event_callback=event_callback,
                 )
             content = extract_text_content(response.content).strip()
             update(
@@ -1010,10 +1160,13 @@ class ResponseComposer:
             logger.warning("Response Composer 失败，使用确定性合并: %s", ex)
 
         # 汇总节点不可用时保留主次标签，避免丢失某个专业 Agent 的结论。
-        return "\n\n".join(
+        content = "\n\n".join(
             f"{response.content}" if index == 0 else f"补充说明：\n{response.content}"
             for index, response in enumerate(successful)
         )
+        if stream_text:
+            await _emit_stream_event(event_callback, "delta", {"text": content})
+        return content
 
 
 # ── 编排器 ────────────────────────────────────────────────────────────────────
@@ -1157,7 +1310,12 @@ class AgentOrchestrator:
 
     # ── 主入口 ────────────────────────────────────────────────────────────────
 
-    async def run(self, req: Request) -> OrchestratorResult:
+    async def run(
+        self,
+        req: Request,
+        event_callback: Optional[StreamEventCallback] = None,
+        stream_text: bool = False,
+    ) -> OrchestratorResult:
         """
         处理一次请求的完整流程：
           请求分析 → 按领域分数路由 → 执行 → 返回结果
@@ -1174,11 +1332,34 @@ class AgentOrchestrator:
 
         # 2. 最高领域分为主 Agent，超过阈值的其他领域并行协作。
         decision = self._route_decision(req)
+        await _emit_stream_event(
+            event_callback,
+            "routing",
+            {
+                "intent": req.intent.value if req.intent else "other",
+                "intent_group": req.intent_group or "other",
+                "primary_agent": decision.primary_agent.value,
+                "supporting_agents": [agent.value for agent in decision.supporting_agents],
+                "confidence": decision.confidence,
+                "domain_scores": dict(req.domain_scores),
+                "message": "已完成 Agent 路由",
+            },
+        )
         if decision.multi_agent:
-            return await self.run_parallel(req, decision)
+            return await self.run_parallel(
+                req,
+                decision,
+                event_callback=event_callback,
+                stream_text=stream_text,
+            )
 
         # 3. 执行主 Agent（含 General 降级）
-        response = await self._execute(req, decision.primary_agent)
+        response = await self._execute(
+            req,
+            decision.primary_agent,
+            event_callback=event_callback,
+            stream_text=stream_text,
+        )
 
         result = OrchestratorResult(
             request_id=req.request_id,
@@ -1198,18 +1379,36 @@ class AgentOrchestrator:
         self._record_tool_trace(result)
         return result
 
-    async def run_parallel(self, req: Request, decision: RoutingDecision) -> OrchestratorResult:
+    async def run_parallel(
+        self,
+        req: Request,
+        decision: RoutingDecision,
+        event_callback: Optional[StreamEventCallback] = None,
+        stream_text: bool = False,
+    ) -> OrchestratorResult:
         """
         并行派发给多个 Agent，合并结果。
         适用于复杂问题（如同时涉及 API 接入、企业权限和订阅账单）。
         """
         t0 = time.monotonic()
         agent_types = decision.agent_types
-        tasks = [self._execute(req, at) for at in agent_types]
+        # Specialist drafts remain internal; the response composer streams the
+        # single user-facing answer once their work is complete.
+        tasks = [self._execute(req, at, event_callback=event_callback) for at in agent_types]
         responses = await asyncio.gather(*tasks, return_exceptions=True)
 
         valid_responses = [r for r in responses if isinstance(r, AgentResponse)]
-        combined = await self._composer.compose(req, valid_responses)
+        await _emit_stream_event(
+            event_callback,
+            "status",
+            {"stage": "compose", "message": "正在合并多个 Agent 的结论"},
+        )
+        combined = await self._composer.compose(
+            req,
+            valid_responses,
+            event_callback=event_callback,
+            stream_text=stream_text,
+        )
         tools_used = list(dict.fromkeys(
             tool_name
             for response in valid_responses
@@ -1303,7 +1502,13 @@ class AgentOrchestrator:
             return None
         return max(agents, key=lambda a: a.stats.routing_score())
 
-    async def _execute(self, req: Request, agent_type: AgentType) -> AgentResponse:
+    async def _execute(
+        self,
+        req: Request,
+        agent_type: AgentType,
+        event_callback: Optional[StreamEventCallback] = None,
+        stream_text: bool = False,
+    ) -> AgentResponse:
         """执行 Agent，失败时降级到 GeneralAgent。"""
         agent = self._best_agent(agent_type)
         if agent is None:
@@ -1315,14 +1520,18 @@ class AgentOrchestrator:
                 success=False,
             )
 
-        response = await agent.handle(req)
+        response = await agent.handle(req, event_callback=event_callback, stream_text=stream_text)
 
         # 专属 Agent 失败时降级到 GeneralAgent
         if not response.success and agent_type != AgentType.GENERAL:
             logger.warning(f"{agent_type.value} 失败，降级到 GeneralAgent")
             fallback = self._best_agent(AgentType.GENERAL)
             if fallback:
-                response = await fallback.handle(req)
+                response = await fallback.handle(
+                    req,
+                    event_callback=event_callback,
+                    stream_text=stream_text,
+                )
 
         return response
 

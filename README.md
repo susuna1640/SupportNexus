@@ -1,6 +1,6 @@
 # SupportNexus
 
-面向 B2B SaaS 客服与运营支持的多 Agent 编排项目。仓库由 Python 服务端和 Vue 前端工作台组成：前端向服务端发送客户问题、管理知识库并展示运行结果；服务端负责意图识别、Agent 路由、知识检索、记忆与评测。
+面向 B2B SaaS 客服与运营支持的多 Agent 编排项目。仓库由 Python 服务端和 React 前端工作台组成：前端向服务端发送客户问题、管理知识库并展示运行结果；服务端负责意图识别、Agent 路由、知识检索、记忆与评测。
 
 ## 当前包含的内容
 
@@ -16,7 +16,7 @@
 
 ### 前端：`SupportNexusFrontend/`
 
-- Vue + Vite 工作台；开发模式默认连接 `http://localhost:8000`，Docker 模式由 Nginx 转发至后端容器。
+- React + Vite 工作台；开发模式默认连接 `http://localhost:8000`，Docker 模式由 Nginx 转发至后端容器。
 - 对话页面会展示服务端返回的意图、领域分数、主/辅 Agent、路由原因、知识库使用情况、耗时与工具调用追踪。
 - 支持 Markdown 回复渲染。
 - 包含知识库统计、检索、文本添加、文件上传、Skills 重载、运行监控与评测触发页面。
@@ -35,7 +35,7 @@
 │   ├── monitor/              运行指标与告警
 │   ├── skills/               业务场景规则
 │   └── tests/                测试
-├── SupportNexusFrontend/     Vue 前端工作台
+├── SupportNexusFrontend/     React 前端工作台
 ├── compose.yaml              四服务的 Docker 编排清单
 ├── SupportNexus/Dockerfile   后端镜像构建配方
 ├── SupportNexusFrontend/Dockerfile  前端构建与 Nginx 运行镜像配方
@@ -51,7 +51,7 @@ Docker Compose 会按根目录的 `compose.yaml` 一次启动四个服务：
 浏览器
   │ http://127.0.0.1:8080
   ▼
-frontend（Nginx，提供 Vue 构建产物）
+frontend（Nginx，提供 React 构建产物）
   │ /api/python/*
   ▼
 backend（FastAPI）
@@ -79,7 +79,7 @@ cp SupportNexus/.env.example SupportNexus/.env
 docker compose up --build -d
 ```
 
-这条命令会先构建 Python 后端镜像和 Vue 前端镜像，再按健康检查顺序启动 Redis、ChromaDB、后端和前端。首次构建需要下载基础镜像与依赖，后续没有变更的层会复用 Docker 缓存。
+这条命令会先构建 Python 后端镜像和 React 前端镜像，再按健康检查顺序启动 Redis、ChromaDB、后端和前端。首次构建需要下载基础镜像与依赖，后续没有变更的层会复用 Docker 缓存。
 
 若网络需要代理，Docker Desktop 会自动读取 macOS 当前的系统代理；可先验证 Docker 能否拉取前端需要的基础镜像：
 

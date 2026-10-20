@@ -20,12 +20,18 @@ services:
         condition: service_healthy
       chromadb:
         condition: service_healthy
+      # 新建 Docker 命名卷默认归 root 所有；先初始化所有权，
+      # 确保以 app 用户运行的后端能持久化 E2E 评测报告。
+      eval-results-init:
+        condition: service_completed_successfully
     ports:
       # 仅允许本机访问后端，避免意外暴露到局域网。
       - "127.0.0.1:8000:8000"
     volumes:
       - supportnexus-user-memories:/app/data/user_memories
       - supportnexus-fallback-chroma-data:/app/data/chroma
+      # 正式 E2E 评测集随镜像提供；仅将可变的评测基线单独持久化，避免覆盖数据集。
+      - supportnexus-eval-results:/app/data/eval/runs
     networks:
       - supportnexus-internal
     healthcheck:
@@ -71,6 +77,14 @@ services:
       retries: 5
       start_period: 20s
 
+  eval-results-init:
+    image: busybox:1.36
+    user: "0:0"
+    command: ["sh", "-c", "chown -R 100:101 /eval-results"]
+    volumes:
+      - supportnexus-eval-results:/eval-results
+    restart: "no"
+
   frontend:
     build:
       context: ./SupportNexusFrontend
@@ -101,3 +115,4 @@ volumes:
   supportnexus-chromadb-data:
   supportnexus-user-memories:
   supportnexus-fallback-chroma-data:
+  supportnexus-eval-results:

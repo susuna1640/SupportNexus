@@ -75,6 +75,75 @@ export async function requestChat(type, settings, message) {
   return normalizeChatResponse(type, raw)
 }
 
+export async function requestChatStream(type, settings, message, { onEvent, signal } = {}) {
+  const meta = backendMeta(type, settings)
+  const payload = buildChatPayload(type, settings, message)
+  const response = await fetch(`${meta.baseUrl}/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify(payload),
+    signal
+  })
+
+  if (!response.ok) {
+    const detail = await response.text()
+    throw new Error(`${response.status} ${response.statusText}: ${detail}`)
+  }
+  if (!response.body) throw new Error('浏览器不支持响应流读取')
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let completed = null
+  let streamError = null
+
+  const dispatch = (event, data) => {
+    onEvent?.(event, data)
+    if (event === 'done') completed = data
+    if (event === 'error') streamError = data?.message || '流式请求失败'
+  }
+  const drain = () => {
+    const frames = []
+    while (true) {
+      const separator = buffer.match(/\r?\n\r?\n/)
+      if (!separator || separator.index === undefined) break
+      frames.push(buffer.slice(0, separator.index))
+      buffer = buffer.slice(separator.index + separator[0].length)
+    }
+    for (const frame of frames) {
+      const parsed = parseSseFrame(frame)
+      if (parsed) dispatch(parsed.event, parsed.data)
+    }
+  }
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read()
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+      drain()
+      if (done) break
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  if (buffer.trim()) {
+    const parsed = parseSseFrame(buffer)
+    if (parsed) dispatch(parsed.event, parsed.data)
+  }
+  if (streamError) throw new Error(streamError)
+  if (!completed) throw new Error('流式连接在收到完成事件前结束')
+
+  return {
+    response: normalizeChatResponse(type, completed),
+    trace: normalizeToolTraceResponse({
+      request_id: completed.request_id || completed.requestId || '',
+      found: true,
+      trace: completed.trace || {}
+    })
+  }
+}
+
 export async function requestToolTrace(type, settings, requestId) {
   if (!requestId) return null
   const raw = await requestJson(backendMeta(type, settings).baseUrl, `/trace/tool/${encodeURIComponent(requestId)}`)
@@ -106,7 +175,7 @@ function buildChatPayload(type, settings, message) {
   }
 }
 
-function normalizeChatResponse(type, raw) {
+export function normalizeChatResponse(type, raw) {
   return {
     backend: type,
     conversationId: raw.conversation_id || raw.conversationId || raw.conv_id || '',
@@ -142,7 +211,7 @@ function optionalNumber(value) {
   return Number.isFinite(number) ? number : null
 }
 
-function normalizeToolTraceResponse(raw) {
+export function normalizeToolTraceResponse(raw) {
   const trace = raw?.trace || {}
   return {
     requestId: raw?.request_id || raw?.requestId || '',
@@ -153,6 +222,26 @@ function normalizeToolTraceResponse(raw) {
       toolCalls: trace.tool_calls || trace.toolCalls || []
     },
     raw
+  }
+}
+
+export function parseSseFrame(frame) {
+  let event = 'message'
+  const dataLines = []
+  for (const line of String(frame || '').split(/\r?\n/)) {
+    if (!line || line.startsWith(':')) continue
+    const separator = line.indexOf(':')
+    const field = separator === -1 ? line : line.slice(0, separator)
+    const value = separator === -1 ? '' : line.slice(separator + 1).replace(/^ /, '')
+    if (field === 'event') event = value || event
+    if (field === 'data') dataLines.push(value)
+  }
+  if (!dataLines.length) return null
+  const rawData = dataLines.join('\n')
+  try {
+    return { event, data: JSON.parse(rawData) }
+  } catch {
+    throw new Error('服务端发送了无法解析的流式事件')
   }
 }
 

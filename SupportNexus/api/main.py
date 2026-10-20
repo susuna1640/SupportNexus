@@ -5,23 +5,24 @@ SupportNexus 智能客服系统 — FastAPI 入口
 所有核心组件在 lifespan 中初始化，通过环境变量配置。
 """
 import asyncio
+import json
 import logging
 import os
 import pathlib
 import sys
 import uuid
-from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
+from contextlib import asynccontextmanager, suppress
+from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional
 
 
 _ROOT = str(pathlib.Path(__file__).parent.parent.resolve())
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Response, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 
@@ -191,7 +192,7 @@ async def lifespan(app: FastAPI):
         api_key=cfg["api_key"],
         base_url=cfg.get("base_url"),
         model=cfg["model"],
-        baseline_path=os.getenv("EVAL_BASELINE_PATH", "/app/data/eval/baseline.json"),
+        baseline_path=os.getenv("EVAL_BASELINE_PATH", "/app/data/eval/runs/baseline.json"),
     )
 
     logger.info("SupportNexus 已就绪")
@@ -262,6 +263,46 @@ class RecentToolTracesResponse(BaseModel):
     items: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+ChatEventCallback = Callable[[str, Dict[str, Any]], Awaitable[None]]
+
+
+async def _emit_chat_event(
+    callback: Optional[ChatEventCallback],
+    event: str,
+    payload: Dict[str, Any],
+) -> None:
+    if callback is not None:
+        await callback(event, payload)
+
+
+def _encode_sse(event: str, payload: Dict[str, Any]) -> str:
+    """Encode one standards-compliant SSE frame without exposing Python reprs."""
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n\n"
+
+
+def _public_tool_trace(trace: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Return only safe tool execution metadata for the live browser stream."""
+    trace = trace or {}
+    return {
+        "request_id": trace.get("request_id", ""),
+        "tools_used": list(trace.get("tools_used", [])),
+        "latency_ms": trace.get("latency_ms"),
+        "tool_calls": [
+            {
+                "agent_type": call.get("agent_type", ""),
+                "tool_name": call.get("tool_name", ""),
+                "success": bool(call.get("success")),
+                "result_success": call.get("result_success"),
+                "latency_ms": call.get("latency_ms"),
+                "cached": bool(call.get("cached")),
+                "reranked": bool(call.get("reranked")),
+            }
+            for call in trace.get("tool_calls", [])
+            if isinstance(call, dict)
+        ],
+    }
+
+
 # ── 路由 ──────────────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
@@ -289,8 +330,11 @@ async def reload_skills():
     return _skill_manager.summary()
 
 
-@app.post("/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest):
+async def _run_chat(
+    req: ChatRequest,
+    event_callback: Optional[ChatEventCallback] = None,
+    stream_text: bool = False,
+) -> ChatResponse:
     """
     主对话接口。完整流程：
       记忆读取 → 意图识别 → Agent 路由 → 执行 → 记忆写入
@@ -303,6 +347,12 @@ async def chat(req: ChatRequest):
     from core.observability import capture, observation, trace_attributes, update
 
     conv_id = req.conv_id or str(uuid.uuid4())
+
+    await _emit_chat_event(
+        event_callback,
+        "status",
+        {"stage": "received", "message": "已接收请求，正在准备会话"},
+    )
 
     with observation(
         "support-nexus-chat-request",
@@ -321,6 +371,11 @@ async def chat(req: ChatRequest):
             metadata={"feature": "customer_support"},
         ):
             # 1. 读取记忆上下文
+            await _emit_chat_event(
+                event_callback,
+                "status",
+                {"stage": "memory", "message": "正在读取会话上下文"},
+            )
             with observation(
                 "conversation-memory-read",
                 as_type="span",
@@ -342,6 +397,11 @@ async def chat(req: ChatRequest):
                 for m in mem_ctx.recent_messages[-5:]
             ] if mem_ctx.recent_messages else None
 
+            await _emit_chat_event(
+                event_callback,
+                "status",
+                {"stage": "intent", "message": "正在识别意图和业务领域"},
+            )
             with observation(
                 "intent-recognition",
                 as_type="chain",
@@ -377,6 +437,11 @@ async def chat(req: ChatRequest):
             )
 
             # 3. 执行
+            await _emit_chat_event(
+                event_callback,
+                "status",
+                {"stage": "orchestration", "message": "正在路由并执行支持 Agent"},
+            )
             with observation(
                 "agent-orchestration",
                 as_type="agent",
@@ -386,7 +451,11 @@ async def chat(req: ChatRequest):
                     "intent_confidence": intent_result.confidence,
                 },
             ) as orchestration_observation:
-                result = await _orchestrator.run(orch_req)
+                result = await _orchestrator.run(
+                    orch_req,
+                    event_callback=event_callback,
+                    stream_text=stream_text,
+                )
                 update(
                     orchestration_observation,
                     output={
@@ -404,6 +473,11 @@ async def chat(req: ChatRequest):
                 )
 
             # 4. 写入记忆
+            await _emit_chat_event(
+                event_callback,
+                "status",
+                {"stage": "memory_write", "message": "正在保存本轮会话"},
+            )
             with observation("conversation-memory-write", as_type="span") as memory_observation:
                 await _memory.add_message(req.user_id, conv_id, MsgRole.USER, req.message)
                 await _memory.add_message(req.user_id, conv_id, MsgRole.ASSISTANT, result.response)
@@ -443,6 +517,61 @@ async def chat(req: ChatRequest):
             )
             update(root_observation, output=capture(response.model_dump()))
             return response
+
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat(req: ChatRequest):
+    """兼容的非流式对话接口。"""
+    return await _run_chat(req)
+
+
+@app.post("/chat/stream", response_class=StreamingResponse)
+async def chat_stream(req: ChatRequest):
+    """以 SSE 推送安全的编排状态与最终答复文本增量。"""
+    if _orchestrator is None or _memory is None:
+        raise HTTPException(503, "服务未就绪")
+
+    async def event_stream():
+        events: asyncio.Queue[str] = asyncio.Queue()
+
+        async def publish(event: str, payload: Dict[str, Any]) -> None:
+            await events.put(_encode_sse(event, payload))
+
+        task = asyncio.create_task(_run_chat(req, event_callback=publish, stream_text=True))
+        try:
+            while not task.done() or not events.empty():
+                try:
+                    frame = await asyncio.wait_for(events.get(), timeout=0.25)
+                except asyncio.TimeoutError:
+                    continue
+                yield frame
+
+            response = await task
+            trace = _public_tool_trace(_orchestrator.get_tool_trace(response.request_id))
+            payload = response.model_dump()
+            payload["trace"] = trace
+            yield _encode_sse("done", payload)
+        except asyncio.CancelledError:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            raise
+        except Exception:
+            logger.exception("流式聊天请求失败")
+            yield _encode_sse(
+                "error",
+                {"stage": "request", "message": "请求处理失败，请稍后重试。"},
+            )
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/monitor")
@@ -547,7 +676,8 @@ class EvalDialogInput(BaseModel):
 
 
 class EvalRunInput(BaseModel):
-    """评测请求。为空时使用内置默认用例。"""
+    """评测请求。默认运行正式 E2E v1；自定义用例需显式选择 legacy。"""
+    suite: Literal["e2e_quality_v1", "legacy"] = "e2e_quality_v1"
     intent_cases: Optional[List[EvalIntentInput]] = None
     dialog_cases: Optional[List[EvalDialogInput]] = None
 
@@ -709,36 +839,51 @@ async def seed_default_knowledge():
 
 @app.post("/eval/run")
 async def run_eval(body: Optional[EvalRunInput] = None):
-    """运行内置评测用例，返回评测报告。"""
+    """运行正式 E2E v1 或显式指定的 legacy 用例，返回评测报告。"""
     if _evaluator is None:
         raise HTTPException(503, "服务未就绪")
-    from evaluation.evaluator import DEFAULT_DIALOG_CASES, DEFAULT_INTENT_CASES, IntentTestCase
-
-    if body and body.intent_cases is not None:
-        intent_cases = [
-            IntentTestCase(
-                message=c.message,
-                expected_intent=c.expected_intent,
-                context=c.context,
-            )
-            for c in body.intent_cases
-        ]
-    else:
-        intent_cases = DEFAULT_INTENT_CASES
-
-    if body and body.dialog_cases is not None:
-        dialog_cases = [
-            c.model_dump(exclude_none=True)
-            for c in body.dialog_cases
-        ]
-    else:
-        dialog_cases = DEFAULT_DIALOG_CASES
-
-    report = await _evaluator.run(
-        intent_cases=intent_cases,
-        dialog_cases=dialog_cases,
+    from evaluation.evaluator import (
+        DEFAULT_DIALOG_CASES,
+        DEFAULT_INTENT_CASES,
+        E2EQualitySuiteError,
+        IntentTestCase,
+        load_e2e_quality_suite,
     )
+
+    if body is None or body.suite == "e2e_quality_v1":
+        if body and (body.intent_cases is not None or body.dialog_cases is not None):
+            raise HTTPException(422, "正式 E2E v1 使用内置数据集；自定义用例请指定 suite=legacy")
+        try:
+            report = await _evaluator.run_e2e_quality_suite(load_e2e_quality_suite())
+        except E2EQualitySuiteError as ex:
+            raise HTTPException(503, f"E2E 评测集不可用: {ex}") from ex
+    else:
+        if body.intent_cases is not None:
+            intent_cases = [
+                IntentTestCase(
+                    message=c.message,
+                    expected_intent=c.expected_intent,
+                    context=c.context,
+                )
+                for c in body.intent_cases
+            ]
+        else:
+            intent_cases = DEFAULT_INTENT_CASES
+
+        if body.dialog_cases is not None:
+            dialog_cases = [
+                c.model_dump(exclude_none=True)
+                for c in body.dialog_cases
+            ]
+        else:
+            dialog_cases = DEFAULT_DIALOG_CASES
+
+        report = await _evaluator.run(
+            intent_cases=intent_cases,
+            dialog_cases=dialog_cases,
+        )
     return {
+        "suite_id":        report.suite_id,
         "pass_rate":       report.pass_rate,
         "total":           report.total,
         "passed":          report.passed,
@@ -833,6 +978,8 @@ if __name__ == "__main__":
     if "--cli" in sys.argv:
         asyncio.run(_cli())
     else:
+        import uvicorn
+
         uvicorn.run(
             "api.main:app",
             host=os.getenv("API_HOST", "0.0.0.0"),

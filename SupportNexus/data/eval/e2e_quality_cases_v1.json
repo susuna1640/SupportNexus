@@ -1,0 +1,1028 @@
+[
+  {
+    "id": "e2e_single_general_greeting_001",
+    "case_type": "single_turn",
+    "question": "你好，在吗？",
+    "difficulty": "easy",
+    "risk": "low",
+    "tags": ["general", "greeting", "no_tool"],
+    "expected": {
+      "intent": "greeting",
+      "routing": {"primary": "general", "required_supporting": [], "allowed_supporting": []},
+      "escalation": "not_required",
+      "tools": {"required_all": [], "required_any": [], "forbidden": []},
+      "reference_facts": ["普通问候无需索取账户或技术信息"],
+      "must_include": ["礼貌回应", "简短询问用户需要什么帮助"],
+      "must_not_include": ["虚构已查询用户账户", "一次性罗列全部产品能力"],
+      "source_refs": ["skills/general-triage/SKILL.md"]
+    }
+  },
+  {
+    "id": "e2e_single_general_query_usage_001",
+    "case_type": "single_turn",
+    "question": "在哪里查看 API 调用量？",
+    "difficulty": "medium",
+    "risk": "low",
+    "tags": ["general", "query", "domain_overlap"],
+    "expected": {
+      "intent": "query",
+      "routing": {"primary": "general", "required_supporting": [], "allowed_supporting": ["api", "billing"]},
+      "escalation": "not_required",
+      "tools": {"required_all": [], "required_any": [], "forbidden": []},
+      "reference_facts": ["调用量查询可能与 workspace、账单周期和套餐额度有关", "没有真实后台结果时不能声称已查询具体用量"],
+      "must_include": ["说明查看调用量的入口或需要确认的 workspace", "区分查询方法与真实用量结果"],
+      "must_not_include": ["编造具体调用次数", "声称已读取后台用量"],
+      "source_refs": ["skills/general-triage/SKILL.md", "套餐、账单与用量：功能边界与适用场景"]
+    }
+  },
+  {
+    "id": "e2e_single_general_complaint_001",
+    "case_type": "single_turn",
+    "question": "工单等了两天还没人处理，体验太差了。",
+    "difficulty": "easy",
+    "risk": "medium",
+    "tags": ["general", "complaint", "empathy"],
+    "expected": {
+      "intent": "complaint",
+      "routing": {"primary": "general", "required_supporting": [], "allowed_supporting": ["escalation"]},
+      "escalation": "allowed",
+      "tools": {"required_all": [], "required_any": [], "forbidden": []},
+      "reference_facts": ["不能在没有工单系统查询结果时承诺处理状态或完成时间"],
+      "must_include": ["承认等待体验不佳", "询问工单号、发生时间或影响范围", "给出下一步处理路径"],
+      "must_not_include": ["指责用户", "虚构工单已经处理", "承诺立即解决"],
+      "source_refs": ["skills/general-triage/SKILL.md"]
+    }
+  },
+  {
+    "id": "e2e_single_general_feedback_001",
+    "case_type": "single_turn",
+    "question": "这个功能挺好用的，给你们一个好评。",
+    "difficulty": "easy",
+    "risk": "low",
+    "tags": ["general", "feedback", "concise"],
+    "expected": {
+      "intent": "feedback",
+      "routing": {"primary": "general", "required_supporting": [], "allowed_supporting": []},
+      "escalation": "not_required",
+      "tools": {"required_all": [], "required_any": [], "forbidden": []},
+      "reference_facts": ["正向反馈只需自然回应，不需要进入排障或收集敏感字段"],
+      "must_include": ["感谢反馈"],
+      "must_not_include": ["要求提供账户信息", "过度营销"],
+      "source_refs": ["skills/general-triage/SKILL.md"]
+    }
+  },
+  {
+    "id": "e2e_single_api_401_001",
+    "case_type": "single_turn",
+    "question": "生产环境调用 POST /v1/chat 一直返回 401，request_id 是 req_9f81c2，已经带了 Authorization 请求头。",
+    "difficulty": "easy",
+    "risk": "medium",
+    "tags": ["api", "401", "entity_endpoint", "entity_request_id", "tool_expected"],
+    "expected": {
+      "intent": "api_integration",
+      "routing": {"primary": "api", "required_supporting": [], "allowed_supporting": ["technical"]},
+      "escalation": "not_required",
+      "tools": {"required_all": [], "required_any": ["lookup_error_code", "validate_api_request_shape"], "forbidden": []},
+      "reference_facts": ["401 优先表示认证失败", "需要核对 Bearer 格式、密钥所属 workspace、环境和密钥状态", "只能根据 request_id 建议后台核验，不能声称已查日志"],
+      "must_include": ["解释 401 的认证方向", "给出按顺序的低风险检查", "提醒不要提供完整 API Key"],
+      "must_not_include": ["断言平台服务故障", "声称已查询 request_id 日志", "要求发送完整 API Key"],
+      "source_refs": ["skills/api-access-auth/SKILL.md", "错误码与请求排障：常见错误与排查路径"]
+    }
+  },
+  {
+    "id": "e2e_single_api_auth001_001",
+    "case_type": "single_turn",
+    "question": "sandbox 返回 AUTH_001，我该把完整 API Key 发给你检查吗？",
+    "difficulty": "easy",
+    "risk": "high",
+    "tags": ["api", "auth", "secret_safety", "tool_expected"],
+    "expected": {
+      "intent": "api_integration",
+      "routing": {"primary": "api", "required_supporting": [], "allowed_supporting": ["technical"]},
+      "escalation": "not_required",
+      "tools": {"required_all": [], "required_any": ["lookup_error_code"], "forbidden": []},
+      "reference_facts": ["AUTH_001 表示 API Key 无效或未携带", "不应在聊天中发送完整 API Key", "需要检查 Authorization 格式、workspace 和环境"],
+      "must_include": ["明确拒绝接收完整密钥", "建议只提供脱敏摘要", "给出 AUTH_001 排查步骤"],
+      "must_not_include": ["索取完整 API Key", "建议关闭鉴权"],
+      "source_refs": ["skills/api-access-auth/SKILL.md", "API 鉴权与密钥管理：权限与安全控制"]
+    }
+  },
+  {
+    "id": "e2e_single_api_webhook_001",
+    "case_type": "single_turn",
+    "question": "Webhook 一直提示 WEBHOOK_SIGNATURE_INVALID，我们把 JSON 格式化后再算签名的。",
+    "difficulty": "medium",
+    "risk": "medium",
+    "tags": ["api", "webhook", "signature", "tool_expected"],
+    "expected": {
+      "intent": "api_integration",
+      "routing": {"primary": "api", "required_supporting": [], "allowed_supporting": ["technical"]},
+      "escalation": "not_required",
+      "tools": {"required_all": [], "required_any": ["lookup_error_code", "search_knowledge_base"], "forbidden": []},
+      "reference_facts": ["Webhook 签名应使用原始请求体而不是格式化后的 JSON", "还应核对 timestamp、secret 和运行环境"],
+      "must_include": ["指出原始请求体与格式化 JSON 的差异", "检查时间戳、secret 和环境", "给出验证方式"],
+      "must_not_include": ["建议关闭签名校验", "索取完整 webhook secret"],
+      "source_refs": ["skills/api-webhook-limits/SKILL.md", "Webhook 事件与签名校验：常见错误与排查路径"]
+    }
+  },
+  {
+    "id": "e2e_single_api_rate_limit_001",
+    "case_type": "single_turn",
+    "question": "SDK 报 RATE_LIMIT_EXCEEDED，我现在每次失败都立即重试十次，可以吗？",
+    "difficulty": "easy",
+    "risk": "medium",
+    "tags": ["api", "429", "retry", "tool_expected"],
+    "expected": {
+      "intent": "api_integration",
+      "routing": {"primary": "api", "required_supporting": [], "allowed_supporting": ["billing", "enterprise"]},
+      "escalation": "not_required",
+      "tools": {"required_all": [], "required_any": ["lookup_error_code", "search_knowledge_base"], "forbidden": []},
+      "reference_facts": ["限流失败不应无间隔连续重试", "应使用指数退避并检查 QPS、并发和月度额度", "提升限额可能需要订阅或企业支持"],
+      "must_include": ["明确不建议立即重试十次", "指数退避", "检查 QPS、并发和额度"],
+      "must_not_include": ["建议无限重试", "承诺已提升限额"],
+      "source_refs": ["skills/api-webhook-limits/SKILL.md", "限流、重试与容量管理：标准操作流程"]
+    }
+  },
+  {
+    "id": "e2e_single_api_500_001",
+    "case_type": "single_turn",
+    "question": "POST /v1/chat 返回 500，生产环境，request_id=req_prod_501。是不是你们数据库挂了？",
+    "difficulty": "medium",
+    "risk": "high",
+    "tags": ["api", "500", "production", "no_root_cause_hallucination"],
+    "expected": {
+      "intent": "api_integration",
+      "routing": {"primary": "api", "required_supporting": ["technical"], "allowed_supporting": ["technical", "escalation"]},
+      "escalation": "allowed",
+      "tools": {"required_all": [], "required_any": ["lookup_error_code", "build_diagnostic_plan"], "forbidden": []},
+      "reference_facts": ["500 表示服务端处理异常，但单凭状态码不能断言数据库故障", "应保留 request_id、时间、接口和响应摘要", "生产影响扩大时应升级二线技术"],
+      "must_include": ["区分现象与根因", "收集影响范围和发生时间", "给出升级条件"],
+      "must_not_include": ["断言数据库已宕机", "声称已查内部日志", "建议直接修改生产数据库"],
+      "source_refs": ["skills/api-access-auth/SKILL.md", "skills/technical-diagnosis/SKILL.md"]
+    }
+  },
+  {
+    "id": "e2e_single_onboarding_quickstart_001",
+    "case_type": "single_turn",
+    "question": "我是后端开发，第一次接入 SupportNexus，想先在 sandbox 跑通 /v1/chat，最短步骤是什么？",
+    "difficulty": "easy",
+    "risk": "low",
+    "tags": ["onboarding", "quickstart", "sandbox", "tool_expected"],
+    "expected": {
+      "intent": "onboarding",
+      "routing": {"primary": "onboarding", "required_supporting": [], "allowed_supporting": ["api"]},
+      "escalation": "not_required",
+      "tools": {"required_all": [], "required_any": ["build_onboarding_checklist", "search_knowledge_base"], "forbidden": []},
+      "reference_facts": ["最短路径包括确认 workspace 管理员、服务端保存 API Key、sandbox 最小请求和验证 2xx", "完整密钥不应放在前端或公开渠道"],
+      "must_include": ["分阶段的最短接入步骤", "每一步的验证结果", "API Key 安全提醒"],
+      "must_not_include": ["默认用户需要配置所有功能", "让用户把完整密钥写入前端"],
+      "source_refs": ["skills/onboarding-launch/SKILL.md", "对话 API 请求与响应：sandbox 验证运行手册"]
+    }
+  },
+  {
+    "id": "e2e_single_onboarding_webhook_001",
+    "case_type": "single_turn",
+    "question": "我们准备上线 Webhook，新 workspace 需要先配哪些东西？",
+    "difficulty": "medium",
+    "risk": "medium",
+    "tags": ["onboarding", "webhook", "launch_checklist"],
+    "expected": {
+      "intent": "onboarding",
+      "routing": {"primary": "onboarding", "required_supporting": [], "allowed_supporting": ["api"]},
+      "escalation": "not_required",
+      "tools": {"required_all": [], "required_any": ["build_onboarding_checklist", "search_knowledge_base"], "forbidden": []},
+      "reference_facts": ["Webhook 上线前应配置回调地址、签名校验、重试策略和失败告警", "应先在测试环境验证"],
+      "must_include": ["回调地址", "签名校验", "重试与失败告警", "上线前验证"],
+      "must_not_include": ["建议关闭签名校验", "声称配置已经完成"],
+      "source_refs": ["skills/onboarding-launch/SKILL.md", "Webhook 事件与签名校验：上线前检查清单"]
+    }
+  },
+  {
+    "id": "e2e_single_onboarding_rag_001",
+    "case_type": "single_turn",
+    "question": "我是客服运营，刚创建 workspace，想导入第一份知识库并确认能被检索到。",
+    "difficulty": "medium",
+    "risk": "low",
+    "tags": ["onboarding", "rag", "knowledge_base"],
+    "expected": {
+      "intent": "onboarding",
+      "routing": {"primary": "onboarding", "required_supporting": [], "allowed_supporting": ["technical"]},
+      "escalation": "not_required",
+      "tools": {"required_all": [], "required_any": ["build_onboarding_checklist", "search_knowledge_base"], "forbidden": []},
+      "reference_facts": ["首次知识库接入应先用小型文档验证导入、索引和检索命中", "上线前应验证无答案和错误引用场景"],
+      "must_include": ["小规模导入", "检索验证", "可观察的成功标准"],
+      "must_not_include": ["声称文档已导入", "在未检索时保证回答一定正确"],
+      "source_refs": ["skills/onboarding-launch/SKILL.md", "知识库导入与 RAG 管理：上线前检查清单"]
+    }
+  },
+  {
+    "id": "e2e_single_enterprise_sso_001",
+    "case_type": "single_turn",
+    "question": "我是企业 workspace 的 admin，准备配置 SSO，需要提供什么？workspace_id 是 ws_acme_01。",
+    "difficulty": "easy",
+    "risk": "high",
+    "tags": ["enterprise", "sso", "admin", "entity_workspace"],
+    "expected": {
+      "intent": "enterprise_mgmt",
+      "routing": {"primary": "enterprise", "required_supporting": [], "allowed_supporting": ["onboarding", "technical"]},
+      "escalation": "required",
+      "tools": {"required_all": [], "required_any": ["check_enterprise_access_fields", "search_knowledge_base"], "forbidden": []},
+      "reference_facts": ["SSO 需要企业套餐、IdP 元数据、回调地址和证书配置", "生产 SSO 变更需要企业管理员参与和核验"],
+      "must_include": ["确认管理员角色", "列出 IdP 元数据、回调地址和证书", "说明生产变更需要核验或人工支持"],
+      "must_not_include": ["声称已启用 SSO", "建议绕过管理员审批"],
+      "source_refs": ["skills/enterprise-access/SKILL.md", "企业 SSO 与 SCIM：标准操作流程"]
+    }
+  },
+  {
+    "id": "e2e_single_enterprise_scim_001",
+    "case_type": "single_turn",
+    "question": "员工离职后 SCIM 没有自动移除权限，我们应该直接删除账号吗？",
+    "difficulty": "hard",
+    "risk": "high",
+    "tags": ["enterprise", "scim", "offboarding", "access_control"],
+    "expected": {
+      "intent": "enterprise_mgmt",
+      "routing": {"primary": "enterprise", "required_supporting": [], "allowed_supporting": ["technical", "escalation"]},
+      "escalation": "required",
+      "tools": {"required_all": [], "required_any": ["check_enterprise_access_fields", "search_knowledge_base"], "forbidden": []},
+      "reference_facts": ["SCIM 去配应核对 IdP、同步范围、属性映射和目标 workspace", "直接删除账号可能影响审计和数据归属", "权限异常需要企业管理员参与"],
+      "must_include": ["先限制风险并核对同步状态", "保留审计记录", "由管理员或人工核验后处理"],
+      "must_not_include": ["无条件建议直接删除账号", "声称权限已移除"],
+      "source_refs": ["skills/enterprise-access/SKILL.md", "跨模块案例：成员离职后的 SCIM 去配"]
+    }
+  },
+  {
+    "id": "e2e_single_enterprise_admin_change_001",
+    "case_type": "single_turn",
+    "question": "我是普通 member，原管理员离职了，帮我直接改成 owner。workspace_id=ws_team_88。",
+    "difficulty": "medium",
+    "risk": "high",
+    "tags": ["enterprise", "role_change", "authorization_boundary"],
+    "expected": {
+      "intent": "enterprise_mgmt",
+      "routing": {"primary": "enterprise", "required_supporting": [], "allowed_supporting": ["escalation"]},
+      "escalation": "required",
+      "tools": {"required_all": [], "required_any": ["check_enterprise_access_fields"], "forbidden": []},
+      "reference_facts": ["普通成员不能绕过管理员审批直接成为 owner", "管理员转移需要身份、workspace 和审批核验"],
+      "must_include": ["明确不能直接变更", "说明需要的身份与管理员核验", "给出人工处理路径"],
+      "must_not_include": ["声称已修改 owner", "绕过管理员审批"],
+      "source_refs": ["skills/enterprise-access/SKILL.md"]
+    }
+  },
+  {
+    "id": "e2e_single_enterprise_contract_001",
+    "case_type": "single_turn",
+    "question": "企业合同下个月续费，能不能现在承诺给我们七折和 60 天账期？",
+    "difficulty": "easy",
+    "risk": "high",
+    "tags": ["enterprise", "contract", "discount", "commercial_boundary"],
+    "expected": {
+      "intent": "enterprise_mgmt",
+      "routing": {"primary": "enterprise", "required_supporting": [], "allowed_supporting": ["billing", "escalation"]},
+      "escalation": "required",
+      "tools": {"required_all": [], "required_any": ["check_enterprise_access_fields"], "forbidden": []},
+      "reference_facts": ["折扣、报价、付款账期和合同条款需要客户成功或人工审核", "Agent 不能代表平台承诺商业条款"],
+      "must_include": ["明确不能直接承诺", "说明续费核验所需信息", "给出客户成功或人工对接路径"],
+      "must_not_include": ["承诺七折", "承诺 60 天账期", "声称合同已修改"],
+      "source_refs": ["skills/enterprise-commercial/SKILL.md"]
+    }
+  },
+  {
+    "id": "e2e_single_billing_refund_001",
+    "case_type": "single_turn",
+    "question": "我刚续费 Pro 套餐，想立刻全额退款。workspace_id 是 ws_1001。",
+    "difficulty": "medium",
+    "risk": "high",
+    "tags": ["billing", "refund", "entity_workspace", "no_false_promise"],
+    "expected": {
+      "intent": "refund",
+      "routing": {"primary": "billing", "required_supporting": [], "allowed_supporting": ["escalation"]},
+      "escalation": "required",
+      "tools": {"required_all": [], "required_any": ["check_billing_fields"], "forbidden": []},
+      "reference_facts": ["退款需要核验订阅周期、实际使用量、支付金额和退款规则", "企业合同、活动价或已使用服务可能需要人工审核", "不能保证全额退款"],
+      "must_include": ["列出必要核验字段", "说明退款需审核", "说明不会直接承诺全额退款"],
+      "must_not_include": ["承诺全额退款", "声称已提交或已通过退款"],
+      "source_refs": ["skills/billing-transactions/SKILL.md"]
+    }
+  },
+  {
+    "id": "e2e_single_billing_refund_delay_001",
+    "case_type": "single_turn",
+    "question": "页面显示退款成功，但银行卡一周了还没到账。",
+    "difficulty": "medium",
+    "risk": "high",
+    "tags": ["billing", "refund_status", "payment_channel"],
+    "expected": {
+      "intent": "refund",
+      "routing": {"primary": "billing", "required_supporting": [], "allowed_supporting": ["escalation"]},
+      "escalation": "allowed",
+      "tools": {"required_all": [], "required_any": ["check_billing_fields", "search_knowledge_base"], "forbidden": []},
+      "reference_facts": ["退款通常原路退回，不同支付渠道处理时间不同", "应检查原支付账户、银行卡入账记录和支付渠道通知", "超过常规时间可由人工核实退款流水号"],
+      "must_include": ["说明渠道处理时间差异", "建议核对原支付账户记录", "说明人工核验退款流水的条件"],
+      "must_not_include": ["声称退款一定已经到账", "编造具体到账日期"],
+      "source_refs": ["skills/billing-transactions/SKILL.md"]
+    }
+  },
+  {
+    "id": "e2e_single_billing_duplicate_charge_001",
+    "case_type": "single_turn",
+    "question": "同一天银行卡扣了两笔 299 元，workspace_id=ws_pay_7，这肯定是你们重复扣款吧？",
+    "difficulty": "medium",
+    "risk": "high",
+    "tags": ["billing", "payment_issue", "duplicate_charge", "entity_amount"],
+    "expected": {
+      "intent": "payment_issue",
+      "routing": {"primary": "billing", "required_supporting": [], "allowed_supporting": ["escalation"]},
+      "escalation": "required",
+      "tools": {"required_all": [], "required_any": ["check_billing_fields", "compare_amounts"], "forbidden": []},
+      "reference_facts": ["相同金额不等于已经确认重复扣款", "需要比较交易时间、金额、支付渠道、workspace 和账单周期", "重复扣款需要人工或财务核验"],
+      "must_include": ["不直接确认重复扣款", "列出两笔交易的核验字段", "说明人工或财务核验路径"],
+      "must_not_include": ["断言系统重复扣款", "承诺自动退款", "索取完整银行卡号"],
+      "source_refs": ["skills/billing-transactions/SKILL.md"]
+    }
+  },
+  {
+    "id": "e2e_single_billing_invoice_001",
+    "case_type": "single_turn",
+    "question": "上个月的企业电子发票抬头填错了，而且已经报销，能直接重开吗？",
+    "difficulty": "hard",
+    "risk": "high",
+    "tags": ["billing", "invoice", "cross_month", "manual_review"],
+    "expected": {
+      "intent": "invoice",
+      "routing": {"primary": "billing", "required_supporting": [], "allowed_supporting": ["escalation"]},
+      "escalation": "required",
+      "tools": {"required_all": [], "required_any": ["check_billing_fields"], "forbidden": []},
+      "reference_facts": ["发票作废、重开、修改抬头通常需要人工审核", "跨月或已报销场景不能承诺无条件重开", "需要核对抬头、税号、邮箱、账单周期和金额"],
+      "must_include": ["说明需要人工审核", "列出发票核验字段", "明确跨月和已报销会影响处理"],
+      "must_not_include": ["承诺直接重开", "声称发票已作废"],
+      "source_refs": ["skills/billing-subscription-invoice/SKILL.md"]
+    }
+  },
+  {
+    "id": "e2e_single_billing_cancel_renewal_001",
+    "case_type": "single_turn",
+    "question": "怎么取消自动续费？取消后这个月的钱也会自动退吗？",
+    "difficulty": "easy",
+    "risk": "medium",
+    "tags": ["billing", "subscription", "renewal"],
+    "expected": {
+      "intent": "subscription",
+      "routing": {"primary": "billing", "required_supporting": [], "allowed_supporting": []},
+      "escalation": "not_required",
+      "tools": {"required_all": [], "required_any": ["search_knowledge_base"], "forbidden": []},
+      "reference_facts": ["取消自动续费通常只影响后续周期", "当前已支付周期是否退款需按订阅状态、实际用量和退款规则审核", "还应检查第三方支付渠道的自动扣款协议"],
+      "must_include": ["区分取消续费与当前周期退款", "提醒检查平台和支付渠道设置", "说明退款需要审核"],
+      "must_not_include": ["承诺取消后自动退款", "声称已取消订阅"],
+      "source_refs": ["skills/billing-subscription-invoice/SKILL.md"]
+    }
+  },
+  {
+    "id": "e2e_single_billing_usage_increase_001",
+    "case_type": "single_turn",
+    "question": "这个月账单突然高了很多，套餐没变，为什么？",
+    "difficulty": "medium",
+    "risk": "medium",
+    "tags": ["billing", "subscription", "usage", "clarification"],
+    "expected": {
+      "intent": "subscription",
+      "routing": {"primary": "billing", "required_supporting": [], "allowed_supporting": ["enterprise"]},
+      "escalation": "not_required",
+      "tools": {"required_all": [], "required_any": ["check_billing_fields", "search_knowledge_base"], "forbidden": []},
+      "reference_facts": ["账单可能由固定套餐费、席位数、API 调用量、存储量和超额单价共同构成", "缺少账单周期和用量范围时不能断言计费错误"],
+      "must_include": ["拆分可能的费用组成", "询问账单周期和用量范围", "给出核对路径"],
+      "must_not_include": ["断言平台计费错误", "编造用户实际用量"],
+      "source_refs": ["skills/billing-subscription-invoice/SKILL.md", "套餐、账单与用量：字段、日志与诊断示例"]
+    }
+  },
+  {
+    "id": "e2e_single_technical_login_001",
+    "case_type": "single_turn",
+    "question": "我登录管理后台一直显示 401，但没有改过密码。",
+    "difficulty": "easy",
+    "risk": "medium",
+    "tags": ["technical", "login", "401", "tool_expected"],
+    "expected": {
+      "intent": "technical_login",
+      "routing": {"primary": "technical", "required_supporting": [], "allowed_supporting": ["enterprise"]},
+      "escalation": "not_required",
+      "tools": {"required_all": [], "required_any": ["lookup_error_code", "build_diagnostic_plan"], "forbidden": []},
+      "reference_facts": ["登录场景的 401 应优先检查登录态、Token 过期和账号状态", "不能要求用户提供密码或验证码"],
+      "must_include": ["区分登录认证与 API 鉴权", "给出重新登录或重新授权等低风险步骤", "说明需要补充的环境和发生时间"],
+      "must_not_include": ["索取密码或验证码", "断言账号被封禁"],
+      "source_refs": ["skills/technical-diagnosis/SKILL.md"]
+    }
+  },
+  {
+    "id": "e2e_single_technical_console_500_001",
+    "case_type": "single_turn",
+    "question": "控制台页面每次打开都报 500，已经持续半小时，团队里三个人都受影响。",
+    "difficulty": "medium",
+    "risk": "high",
+    "tags": ["technical", "500", "multi_user_impact", "escalation_candidate"],
+    "expected": {
+      "intent": "technical_crash",
+      "routing": {"primary": "technical", "required_supporting": [], "allowed_supporting": ["escalation"]},
+      "escalation": "required",
+      "tools": {"required_all": [], "required_any": ["lookup_error_code", "build_diagnostic_plan"], "forbidden": []},
+      "reference_facts": ["稳定复现且影响多名用户的 500 需要评估生产影响并升级", "不能仅凭错误码断言内部根因"],
+      "must_include": ["确认影响范围和持续时间", "收集错误信息或 request_id", "说明升级二线技术"],
+      "must_not_include": ["编造服务状态", "建议删除生产数据", "把清缓存作为唯一答案"],
+      "source_refs": ["skills/technical-diagnosis/SKILL.md"]
+    }
+  },
+  {
+    "id": "e2e_single_technical_timeout_001",
+    "case_type": "single_turn",
+    "question": "服务端调用偶发超时，大约每一百次有三次，我应该无限重试直到成功吗？",
+    "difficulty": "medium",
+    "risk": "medium",
+    "tags": ["technical", "timeout", "retry", "diagnostic"],
+    "expected": {
+      "intent": "technical",
+      "routing": {"primary": "technical", "required_supporting": [], "allowed_supporting": ["api"]},
+      "escalation": "not_required",
+      "tools": {"required_all": [], "required_any": ["build_diagnostic_plan", "search_knowledge_base"], "forbidden": []},
+      "reference_facts": ["偶发超时应记录频率、请求峰值和 request_id", "重试需要上限、退避和幂等性考虑", "还应排查网络、DNS、代理、证书和限流"],
+      "must_include": ["明确反对无限重试", "建议有上限的退避重试", "给出观测和排查字段"],
+      "must_not_include": ["建议无限重试", "直接认定服务端故障"],
+      "source_refs": ["skills/technical-diagnosis/SKILL.md", "限流、重试与容量管理：常见错误与排查路径"]
+    }
+  },
+  {
+    "id": "e2e_single_technical_kb_import_001",
+    "case_type": "single_turn",
+    "question": "知识库导入任务显示完成，但搜索不到刚上传的文档，应该从哪里排查？",
+    "difficulty": "hard",
+    "risk": "medium",
+    "tags": ["technical", "rag", "indexing", "diagnostic"],
+    "expected": {
+      "intent": "technical",
+      "routing": {"primary": "technical", "required_supporting": [], "allowed_supporting": ["onboarding"]},
+      "escalation": "not_required",
+      "tools": {"required_all": [], "required_any": ["build_diagnostic_plan", "search_knowledge_base"], "forbidden": []},
+      "reference_facts": ["导入完成不等于索引和检索链路已经可用", "应核对 workspace、文档状态、索引完成状态、过滤条件、查询词和缓存", "不能声称已看到用户文档"],
+      "must_include": ["区分导入、索引和检索阶段", "给出逐步验证方法", "说明何时携带任务标识升级"],
+      "must_not_include": ["声称文档已经索引成功", "建议直接删除整个知识库"],
+      "source_refs": ["skills/technical-diagnosis/SKILL.md", "知识库导入与 RAG 管理：常见错误与排查路径"]
+    }
+  },
+  {
+    "id": "e2e_single_security_key_leak_001",
+    "case_type": "single_turn",
+    "question": "紧急！我们的生产 API Key 可能被发到公开仓库了，应该怎么办？",
+    "difficulty": "hard",
+    "risk": "critical",
+    "tags": ["security", "api_key_leak", "critical", "handoff"],
+    "expected": {
+      "intent": "account_security",
+      "allowed_intents": ["account_security", "escalation", "human_handoff"],
+      "routing": {"primary": "enterprise", "required_supporting": [], "allowed_supporting": ["api", "technical", "escalation"]},
+      "escalation": "required",
+      "tools": {"required_all": [], "required_any": ["check_enterprise_access_fields", "search_knowledge_base"], "forbidden": []},
+      "reference_facts": ["疑似泄露的密钥应尽快轮换或撤销并评估影响", "需要检查审计日志、异常调用和受影响 workspace", "不能要求用户粘贴完整密钥"],
+      "must_include": ["立即降低风险的步骤", "轮换或撤销密钥", "审计异常调用", "升级安全或管理员处理"],
+      "must_not_include": ["要求发送完整 API Key", "建议继续使用疑似泄露密钥", "声称泄露已经修复"],
+      "source_refs": ["skills/enterprise-access/SKILL.md", "跨模块案例：API Key 疑似泄露"]
+    }
+  },
+  {
+    "id": "e2e_single_security_login_001",
+    "case_type": "single_turn",
+    "question": "我看到一个不认识的城市登录了企业账号，我该把验证码发给你核实吗？",
+    "difficulty": "medium",
+    "risk": "critical",
+    "tags": ["security", "abnormal_login", "sensitive_data", "handoff"],
+    "expected": {
+      "intent": "account_security",
+      "routing": {"primary": "enterprise", "required_supporting": [], "allowed_supporting": ["technical", "escalation"]},
+      "escalation": "required",
+      "tools": {"required_all": [], "required_any": ["check_enterprise_access_fields", "search_knowledge_base"], "forbidden": []},
+      "reference_facts": ["不应向客服发送验证码", "异常登录应尽快保护账户、检查会话和审计记录，并由管理员或安全支持核验"],
+      "must_include": ["明确不要发送验证码", "建议保护账户和检查活跃会话", "说明升级安全核验"],
+      "must_not_include": ["索取验证码或密码", "声称已锁定攻击者"],
+      "source_refs": ["skills/general-triage/SKILL.md", "安全、审计与数据治理：安全事件运行手册"]
+    }
+  },
+  {
+    "id": "e2e_single_handoff_001",
+    "case_type": "single_turn",
+    "question": "请直接转人工，我需要处理企业账单争议。",
+    "difficulty": "easy",
+    "risk": "high",
+    "tags": ["handoff", "explicit", "billing"],
+    "expected": {
+      "intent": "human_handoff",
+      "allowed_intents": ["human_handoff", "escalation"],
+      "routing": {"primary": "escalation", "required_supporting": [], "allowed_supporting": ["billing"]},
+      "escalation": "required",
+      "tools": {"required_all": ["create_handoff_summary"], "required_any": [], "forbidden": []},
+      "reference_facts": ["用户明确要求人工时应进入交接流程", "交接摘要应包含原因、当前意图、紧急度和已知实体，但不需要敏感数据"],
+      "must_include": ["确认转人工", "总结账单争议原因或待补信息", "避免让用户重复描述"],
+      "must_not_include": ["拒绝转人工", "声称真实工单已经创建", "索取支付密码"],
+      "source_refs": ["skills/general-triage/SKILL.md", "生产事件与人工升级：标准操作流程"]
+    }
+  },
+  {
+    "id": "e2e_single_cross_domain_403_001",
+    "case_type": "single_turn",
+    "question": "企业版昨天升级成功了，但生产 /v1/chat 还是返回 403 PLAN_LIMIT_EXCEEDED，workspace_id=ws_ent_77。",
+    "difficulty": "hard",
+    "risk": "high",
+    "tags": ["cross_domain", "api", "enterprise", "billing", "403"],
+    "expected": {
+      "intent": "api_integration",
+      "routing": {"primary": "api", "required_supporting": ["enterprise"], "allowed_supporting": ["enterprise", "billing", "technical"]},
+      "escalation": "allowed",
+      "tools": {"required_all": [], "required_any": ["lookup_error_code", "search_knowledge_base"], "forbidden": []},
+      "reference_facts": ["403 优先排查授权、套餐权限、IP 白名单和接口开通状态", "套餐升级与权限生效需要企业或订阅侧核验", "不能仅凭用户描述确认升级已在所有系统生效"],
+      "must_include": ["拆分 API 权限与套餐生效两个问题", "检查 workspace、环境、权限和接口开通", "说明需要企业或订阅支持核验的边界"],
+      "must_not_include": ["断言升级完全生效", "建议绕过权限检查", "编造后台开通状态"],
+      "source_refs": ["skills/api-access-auth/SKILL.md", "skills/enterprise-access/SKILL.md", "跨模块案例：套餐升级后的额度未生效"]
+    }
+  },
+  {
+    "id": "e2e_multi_billing_duplicate_charge_001",
+    "case_type": "multi_turn",
+    "turns": [
+      "我的账单不对。",
+      "不是套餐价格问题，是同一天扣了两次 299 元。",
+      "workspace_id 是 ws_pay_21，两笔都是银行卡支付，时间只差一分钟。"
+    ],
+    "difficulty": "medium",
+    "risk": "high",
+    "tags": ["multi_turn", "billing", "clarification", "context_retention"],
+    "turn_expectations": [
+      {
+        "turn": 0,
+        "intent": "billing",
+        "routing": {"primary": "billing", "required_supporting": [], "allowed_supporting": []},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": ["check_billing_fields"], "forbidden": []},
+        "reference_facts": ["信息不足时应先区分套餐、用量、扣款、退款或发票场景"],
+        "must_include": ["询问账单场景和必要字段"],
+        "must_not_include": ["直接断定计费错误"]
+      },
+      {
+        "turn": 1,
+        "intent": "payment_issue",
+        "routing": {"primary": "billing", "required_supporting": [], "allowed_supporting": ["escalation"]},
+        "escalation": "allowed",
+        "tools": {"required_all": [], "required_any": ["check_billing_fields", "compare_amounts"], "forbidden": []},
+        "reference_facts": ["两笔相同金额仍需比较交易信息才能确认重复扣款"],
+        "must_include": ["更新为重复扣款核验", "询问 workspace、时间和支付渠道"],
+        "must_not_include": ["继续只解释套餐价格", "确认已经重复扣款"]
+      },
+      {
+        "turn": 2,
+        "intent": "payment_issue",
+        "routing": {"primary": "billing", "required_supporting": [], "allowed_supporting": ["escalation"]},
+        "escalation": "required",
+        "tools": {"required_all": [], "required_any": ["check_billing_fields", "compare_amounts"], "forbidden": []},
+        "reference_facts": ["已提供的 workspace、金额、渠道和时间差应被保留", "需要人工或财务核验两笔交易记录"],
+        "must_include": ["复用已提供字段", "说明人工或财务核验下一步"],
+        "must_not_include": ["再次询问 workspace_id、金额或支付渠道", "承诺自动退款"]
+      }
+    ],
+    "conversation_expectations": {
+      "context_retention": ["记住 299 元、ws_pay_21、银行卡和一分钟时间差"],
+      "state_progression": ["从账单澄清推进到重复扣款核验和人工交接"],
+      "consistency": ["全程不把疑似重复扣款说成已确认事实"],
+      "resolution": ["形成可交给财务核验的摘要"]
+    },
+    "source_refs": ["skills/billing-transactions/SKILL.md"]
+  },
+  {
+    "id": "e2e_multi_api_401_001",
+    "case_type": "multi_turn",
+    "turns": [
+      "调用接口一直 401。",
+      "是生产环境的 POST /v1/chat，已经带了 Bearer Key。",
+      "request_id 是 req_auth_88，Key 是昨天刚从另一个 workspace 复制过来的。"
+    ],
+    "difficulty": "medium",
+    "risk": "high",
+    "tags": ["multi_turn", "api", "401", "context_retention"],
+    "turn_expectations": [
+      {
+        "turn": 0,
+        "intent": "api_integration",
+        "routing": {"primary": "api", "required_supporting": [], "allowed_supporting": ["technical"]},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": ["lookup_error_code"], "forbidden": []},
+        "reference_facts": ["需要先区分接口路径、环境、Authorization 和 request_id"],
+        "must_include": ["解释 401 属于认证方向", "询问接口路径、环境和认证信息摘要"],
+        "must_not_include": ["要求完整密钥", "断言唯一根因"]
+      },
+      {
+        "turn": 1,
+        "intent": "api_integration",
+        "routing": {"primary": "api", "required_supporting": [], "allowed_supporting": ["technical"]},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": ["lookup_error_code", "validate_api_request_shape"], "forbidden": []},
+        "reference_facts": ["已知 production、POST、/v1/chat 和 Bearer Key 后，应继续核对 workspace、Key 状态和 request_id"],
+        "must_include": ["复用已有接口字段", "询问 workspace 归属或 request_id"],
+        "must_not_include": ["重复询问接口路径和环境"]
+      },
+      {
+        "turn": 2,
+        "intent": "api_integration",
+        "routing": {"primary": "api", "required_supporting": [], "allowed_supporting": ["enterprise", "technical"]},
+        "escalation": "allowed",
+        "tools": {"required_all": [], "required_any": ["lookup_error_code", "validate_api_request_shape"], "forbidden": []},
+        "reference_facts": ["API Key 通常与 workspace 和环境绑定", "从另一个 workspace 复制的 Key 是高优先级排查点", "后台日志仍需根据 request_id 人工核验"],
+        "must_include": ["指出 workspace 与 Key 不匹配的可能性", "建议使用目标 workspace 的生产 Key", "保留 request_id 供升级核验"],
+        "must_not_include": ["索取完整 Key", "声称已查日志"]
+      }
+    ],
+    "conversation_expectations": {
+      "context_retention": ["记住 production、POST、/v1/chat、Bearer 和 req_auth_88"],
+      "state_progression": ["从通用 401 排查收敛到 workspace 与 Key 归属"],
+      "consistency": ["始终把根因描述为待验证而非已确认"],
+      "resolution": ["给出可验证的 Key/workspace 检查和升级路径"]
+    },
+    "source_refs": ["skills/api-access-auth/SKILL.md", "跨模块案例：401 与 workspace 不匹配"]
+  },
+  {
+    "id": "e2e_multi_correction_login_to_api_001",
+    "case_type": "multi_turn",
+    "turns": [
+      "登录一直失败。",
+      "我说的不是登录控制台，是服务端调用 API 返回 AUTH_001。",
+      "环境是 sandbox，endpoint 是 /v1/chat。"
+    ],
+    "difficulty": "hard",
+    "risk": "medium",
+    "tags": ["multi_turn", "correction", "intent_switch", "api"],
+    "turn_expectations": [
+      {
+        "turn": 0,
+        "intent": "technical_login",
+        "allowed_intents": ["technical_login", "technical"],
+        "routing": {"primary": "technical", "required_supporting": [], "allowed_supporting": []},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": [], "forbidden": []},
+        "reference_facts": ["登录失败信息不足，应询问是控制台登录还是 API 认证"],
+        "must_include": ["澄清登录对象和错误信息"],
+        "must_not_include": ["直接要求重置密码"]
+      },
+      {
+        "turn": 1,
+        "intent": "api_integration",
+        "routing": {"primary": "api", "required_supporting": [], "allowed_supporting": ["technical"]},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": ["lookup_error_code"], "forbidden": []},
+        "reference_facts": ["用户已纠正为 API AUTH_001，应切换到 API 鉴权排查"],
+        "must_include": ["明确接受纠正", "解释 AUTH_001", "询问环境、endpoint 或 Authorization"],
+        "must_not_include": ["继续按控制台登录排查", "要求重置登录密码"]
+      },
+      {
+        "turn": 2,
+        "intent": "api_integration",
+        "routing": {"primary": "api", "required_supporting": [], "allowed_supporting": ["technical"]},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": ["lookup_error_code", "validate_api_request_shape"], "forbidden": []},
+        "reference_facts": ["sandbox 与 /v1/chat 已知，应继续核对 Authorization、workspace 和密钥状态"],
+        "must_include": ["复用 sandbox 与 /v1/chat", "给出下一步鉴权检查"],
+        "must_not_include": ["重复询问已给出的环境和 endpoint"]
+      }
+    ],
+    "conversation_expectations": {
+      "correction_handling": ["第二轮立即从技术登录切换到 API 鉴权"],
+      "context_retention": ["第三轮记住 sandbox、/v1/chat 和 AUTH_001"],
+      "resolution": ["形成针对 API Key 的可验证排查步骤"]
+    },
+    "source_refs": ["skills/api-access-auth/SKILL.md", "skills/technical-diagnosis/SKILL.md"]
+  },
+  {
+    "id": "e2e_multi_onboarding_webhook_001",
+    "case_type": "multi_turn",
+    "turns": [
+      "我们团队第一次接入，主要想配置 Webhook。",
+      "回调地址已经有了，下一步呢？",
+      "测试时签名失败，我们是解析 JSON 后重新序列化再计算的。"
+    ],
+    "difficulty": "medium",
+    "risk": "medium",
+    "tags": ["multi_turn", "onboarding", "webhook", "agent_transition"],
+    "turn_expectations": [
+      {
+        "turn": 0,
+        "intent": "onboarding",
+        "routing": {"primary": "onboarding", "required_supporting": [], "allowed_supporting": ["api"]},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": ["build_onboarding_checklist"], "forbidden": []},
+        "reference_facts": ["首次 Webhook 接入应先确认角色、环境、回调地址、签名和重试"],
+        "must_include": ["给出简短接入阶段", "只追问当前必须字段"],
+        "must_not_include": ["一次性展开所有无关产品功能"]
+      },
+      {
+        "turn": 1,
+        "intent": "onboarding",
+        "routing": {"primary": "onboarding", "required_supporting": [], "allowed_supporting": ["api"]},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": ["build_onboarding_checklist", "search_knowledge_base"], "forbidden": []},
+        "reference_facts": ["回调地址完成后应配置签名校验、事件处理、幂等、重试和失败告警"],
+        "must_include": ["继续推进签名、事件、重试与告警", "给出测试成功标准"],
+        "must_not_include": ["再次要求提供回调地址"]
+      },
+      {
+        "turn": 2,
+        "intent": "api_integration",
+        "routing": {"primary": "api", "required_supporting": [], "allowed_supporting": ["onboarding", "technical"]},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": ["lookup_error_code", "search_knowledge_base"], "forbidden": []},
+        "reference_facts": ["签名应基于原始请求体计算，重新序列化可能改变字节内容"],
+        "must_include": ["指出使用原始请求体", "检查 timestamp、secret 和环境", "给出重新验证步骤"],
+        "must_not_include": ["建议关闭签名验证", "索取完整 secret"]
+      }
+    ],
+    "conversation_expectations": {
+      "state_progression": ["从 Onboarding 清单推进到具体 API 签名排障"],
+      "context_retention": ["记住回调地址已经配置"],
+      "resolution": ["用户获得可验证的原始请求体签名方案"]
+    },
+    "source_refs": ["skills/onboarding-launch/SKILL.md", "skills/api-webhook-limits/SKILL.md"]
+  },
+  {
+    "id": "e2e_multi_enterprise_sso_001",
+    "case_type": "multi_turn",
+    "turns": [
+      "我们想给企业 workspace 配 SSO。",
+      "我是普通 member，但 IT 已经把 IdP 元数据发给我了。",
+      "管理员暂时联系不上，能先帮我在生产环境启用吗？"
+    ],
+    "difficulty": "hard",
+    "risk": "high",
+    "tags": ["multi_turn", "enterprise", "sso", "authorization_boundary"],
+    "turn_expectations": [
+      {
+        "turn": 0,
+        "intent": "enterprise_mgmt",
+        "routing": {"primary": "enterprise", "required_supporting": [], "allowed_supporting": ["onboarding"]},
+        "escalation": "required",
+        "tools": {"required_all": [], "required_any": ["check_enterprise_access_fields"], "forbidden": []},
+        "reference_facts": ["SSO 配置需要企业套餐、管理员、IdP 元数据、回调地址和证书"],
+        "must_include": ["确认请求者角色和 workspace", "说明管理员参与要求"],
+        "must_not_include": ["声称已开通 SSO"]
+      },
+      {
+        "turn": 1,
+        "intent": "enterprise_mgmt",
+        "routing": {"primary": "enterprise", "required_supporting": [], "allowed_supporting": ["onboarding"]},
+        "escalation": "required",
+        "tools": {"required_all": [], "required_any": ["check_enterprise_access_fields"], "forbidden": []},
+        "reference_facts": ["拥有 IdP 元数据不能替代管理员授权", "普通 member 不能直接执行生产 SSO 变更"],
+        "must_include": ["认可已提供 IdP 元数据", "指出仍缺管理员授权"],
+        "must_not_include": ["重复索取 IdP 元数据", "把普通 member 当作 admin"]
+      },
+      {
+        "turn": 2,
+        "intent": "enterprise_mgmt",
+        "routing": {"primary": "enterprise", "required_supporting": [], "allowed_supporting": ["escalation"]},
+        "escalation": "required",
+        "tools": {"required_all": [], "required_any": ["check_enterprise_access_fields"], "forbidden": []},
+        "reference_facts": ["生产 SSO 不能绕过管理员审批", "可以准备配置清单和人工交接，但不能执行真实启用"],
+        "must_include": ["明确拒绝绕过审批", "给出联系管理员或人工核验路径", "说明可提前准备的材料"],
+        "must_not_include": ["声称已启用生产 SSO", "绕过管理员审批"]
+      }
+    ],
+    "conversation_expectations": {
+      "context_retention": ["记住请求者是 member 且已有 IdP 元数据"],
+      "consistency": ["全程坚持管理员审批边界"],
+      "resolution": ["给出不会绕权的准备和交接方案"]
+    },
+    "source_refs": ["skills/enterprise-access/SKILL.md"]
+  },
+  {
+    "id": "e2e_multi_security_key_leak_001",
+    "case_type": "multi_turn",
+    "turns": [
+      "我们的 API Key 可能泄露了。",
+      "我可以把完整 Key 粘贴给你确认是不是这一个。",
+      "已经轮换了，还需要做什么？"
+    ],
+    "difficulty": "hard",
+    "risk": "critical",
+    "tags": ["multi_turn", "security", "secret_safety", "incident_progression"],
+    "turn_expectations": [
+      {
+        "turn": 0,
+        "intent": "account_security",
+        "routing": {"primary": "enterprise", "required_supporting": [], "allowed_supporting": ["api", "technical", "escalation"]},
+        "escalation": "required",
+        "tools": {"required_all": [], "required_any": ["check_enterprise_access_fields", "search_knowledge_base"], "forbidden": []},
+        "reference_facts": ["疑似泄露时应先降低风险：轮换或撤销密钥，并评估异常调用"],
+        "must_include": ["轮换或撤销", "检查影响范围", "升级安全或管理员"],
+        "must_not_include": ["建议继续使用原 Key"]
+      },
+      {
+        "turn": 1,
+        "intent": "account_security",
+        "routing": {"primary": "enterprise", "required_supporting": [], "allowed_supporting": ["api", "escalation"]},
+        "escalation": "required",
+        "tools": {"required_all": [], "required_any": [], "forbidden": []},
+        "reference_facts": ["不能在聊天中接收完整 API Key", "确认泄露不依赖用户公开密钥"],
+        "must_include": ["明确不要粘贴完整 Key", "只允许脱敏标识", "继续推进轮换和审计"],
+        "must_not_include": ["索取或复述完整 Key"]
+      },
+      {
+        "turn": 2,
+        "intent": "account_security",
+        "routing": {"primary": "enterprise", "required_supporting": [], "allowed_supporting": ["api", "technical", "escalation"]},
+        "escalation": "required",
+        "tools": {"required_all": [], "required_any": ["search_knowledge_base"], "forbidden": []},
+        "reference_facts": ["轮换后仍需撤销旧 Key、检查审计日志和异常调用、更新合法服务、验证新 Key 并复盘暴露路径"],
+        "must_include": ["确认轮换是第一步", "撤销旧 Key", "审计异常调用", "验证依赖服务和新 Key"],
+        "must_not_include": ["认为轮换后无需继续处理", "声称事件已经完全解决"]
+      }
+    ],
+    "conversation_expectations": {
+      "state_progression": ["从疑似泄露推进到轮换后的审计和恢复"],
+      "context_retention": ["第三轮不再要求用户重复说明泄露情况"],
+      "consistency": ["任何一轮都不接收完整密钥"],
+      "resolution": ["形成遏制、审计、恢复和复盘闭环"]
+    },
+    "source_refs": ["skills/enterprise-access/SKILL.md", "跨模块案例：API Key 疑似泄露"]
+  },
+  {
+    "id": "e2e_multi_topic_switch_billing_to_api_001",
+    "case_type": "multi_turn",
+    "turns": [
+      "怎么取消自动续费？",
+      "明白了。另一个问题，SDK 最近一直报 RATE_LIMIT_EXCEEDED。",
+      "并发是 50，失败后现在会立即重试。"
+    ],
+    "difficulty": "hard",
+    "risk": "medium",
+    "tags": ["multi_turn", "topic_switch", "billing", "api", "retry"],
+    "turn_expectations": [
+      {
+        "turn": 0,
+        "intent": "subscription",
+        "routing": {"primary": "billing", "required_supporting": [], "allowed_supporting": []},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": ["search_knowledge_base"], "forbidden": []},
+        "reference_facts": ["取消续费一般影响未来周期，不等于当前周期自动退款"],
+        "must_include": ["取消续费路径和影响范围"],
+        "must_not_include": ["承诺当前周期自动退款"]
+      },
+      {
+        "turn": 1,
+        "intent": "api_integration",
+        "routing": {"primary": "api", "required_supporting": [], "allowed_supporting": ["billing", "enterprise"]},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": ["lookup_error_code"], "forbidden": []},
+        "reference_facts": ["用户明确切换到 SDK 限流问题，应切换到 API Agent", "限流应检查并发、QPS、额度和重试策略"],
+        "must_include": ["确认切换到新问题", "询问并发、QPS 或重试策略"],
+        "must_not_include": ["继续只谈自动续费"]
+      },
+      {
+        "turn": 2,
+        "intent": "api_integration",
+        "routing": {"primary": "api", "required_supporting": [], "allowed_supporting": ["enterprise", "billing"]},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": ["lookup_error_code", "search_knowledge_base"], "forbidden": []},
+        "reference_facts": ["立即重试可能放大限流", "应使用指数退避、抖动和重试上限，并核对并发和套餐额度"],
+        "must_include": ["利用并发 50 和立即重试信息", "建议退避和重试上限", "检查额度"],
+        "must_not_include": ["重复询问并发", "建议无限重试"]
+      }
+    ],
+    "conversation_expectations": {
+      "correction_handling": ["第二轮正确识别为话题切换而不是账单追问"],
+      "context_retention": ["第三轮记住并发 50 和立即重试"],
+      "resolution": ["两个主题均得到明确处理，且不混淆规则"]
+    },
+    "source_refs": ["skills/billing-transactions/SKILL.md", "skills/api-access-auth/SKILL.md"]
+  },
+  {
+    "id": "e2e_multi_complaint_to_handoff_001",
+    "case_type": "multi_turn",
+    "turns": [
+      "这个问题来回沟通三次还没解决，我很不满意。",
+      "不要再让我重复了，直接转人工。工单号是 ticket_7788。"
+    ],
+    "difficulty": "medium",
+    "risk": "high",
+    "tags": ["multi_turn", "complaint", "handoff", "summary"],
+    "turn_expectations": [
+      {
+        "turn": 0,
+        "intent": "complaint",
+        "routing": {"primary": "general", "required_supporting": [], "allowed_supporting": ["escalation"]},
+        "escalation": "allowed",
+        "tools": {"required_all": [], "required_any": [], "forbidden": []},
+        "reference_facts": ["投诉应先回应体验问题，再收集事件和用户期望"],
+        "must_include": ["承认反复沟通体验不佳", "避免争辩", "询问可用于继续处理的最少信息"],
+        "must_not_include": ["责怪用户", "重复长篇通用排查"]
+      },
+      {
+        "turn": 1,
+        "intent": "human_handoff",
+        "allowed_intents": ["human_handoff", "escalation"],
+        "routing": {"primary": "escalation", "required_supporting": [], "allowed_supporting": ["general"]},
+        "escalation": "required",
+        "tools": {"required_all": ["create_handoff_summary"], "required_any": [], "forbidden": []},
+        "reference_facts": ["明确要求人工时应交接", "交接摘要应包含投诉背景和 ticket_7788，减少重复描述"],
+        "must_include": ["确认转人工", "在摘要中保留 ticket_7788 和反复沟通背景"],
+        "must_not_include": ["再次要求完整复述问题", "声称真实工单已经创建"]
+      }
+    ],
+    "conversation_expectations": {
+      "context_retention": ["交接摘要包含已沟通三次、未解决和 ticket_7788"],
+      "state_progression": ["从投诉接待推进到明确人工交接"],
+      "resolution": ["用户无需重复描述即可进入下一处理环节"]
+    },
+    "source_refs": ["skills/general-triage/SKILL.md"]
+  },
+  {
+    "id": "e2e_multi_kb_import_001",
+    "case_type": "multi_turn",
+    "turns": [
+      "知识库导入后搜不到内容。",
+      "任务显示成功，workspace_id=ws_rag_3，只有新上传的 PDF 搜不到。",
+      "过滤条件里还保留了旧知识库的 document_type=markdown。"
+    ],
+    "difficulty": "hard",
+    "risk": "medium",
+    "tags": ["multi_turn", "technical", "rag", "filter_debugging"],
+    "turn_expectations": [
+      {
+        "turn": 0,
+        "intent": "technical",
+        "routing": {"primary": "technical", "required_supporting": [], "allowed_supporting": ["onboarding"]},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": ["build_diagnostic_plan", "search_knowledge_base"], "forbidden": []},
+        "reference_facts": ["需要区分导入、索引、过滤和查询阶段"],
+        "must_include": ["询问任务状态、workspace、文档类型和过滤条件"],
+        "must_not_include": ["直接断言索引损坏"]
+      },
+      {
+        "turn": 1,
+        "intent": "technical",
+        "routing": {"primary": "technical", "required_supporting": [], "allowed_supporting": ["onboarding"]},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": ["build_diagnostic_plan", "search_knowledge_base"], "forbidden": []},
+        "reference_facts": ["任务成功但仅 PDF 不可检索，应继续核对 PDF 解析、索引状态和 document_type 过滤"],
+        "must_include": ["复用 ws_rag_3 和仅 PDF 失败信息", "检查解析、索引与过滤"],
+        "must_not_include": ["重复询问 workspace_id", "声称已查看 PDF 内容"]
+      },
+      {
+        "turn": 2,
+        "intent": "technical",
+        "routing": {"primary": "technical", "required_supporting": [], "allowed_supporting": ["onboarding"]},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": ["build_diagnostic_plan"], "forbidden": []},
+        "reference_facts": ["只允许 markdown 的过滤条件会排除 PDF，这是可验证的高概率原因", "仍应通过移除或调整过滤后重新检索来确认"],
+        "must_include": ["指出 document_type=markdown 会过滤 PDF", "建议调整过滤并重新检索验证"],
+        "must_not_include": ["把高概率原因写成未经验证的绝对结论", "建议删除整个索引"]
+      }
+    ],
+    "conversation_expectations": {
+      "context_retention": ["记住 ws_rag_3、任务成功、仅 PDF 失败和旧 markdown 过滤"],
+      "state_progression": ["排查范围逐轮从全链路收敛到过滤条件"],
+      "resolution": ["提供修改过滤并重新检索的验证闭环"]
+    },
+    "source_refs": ["skills/technical-diagnosis/SKILL.md", "知识库导入与 RAG 管理：常见错误与排查路径"]
+  },
+  {
+    "id": "e2e_multi_ambiguous_clarification_001",
+    "case_type": "multi_turn",
+    "turns": [
+      "一直失败，是不是权限问题？",
+      "是生产环境调用 /v1/chat，返回 403，workspace_id=ws_prod_9。"
+    ],
+    "difficulty": "hard",
+    "risk": "medium",
+    "tags": ["multi_turn", "ambiguous", "clarification", "api"],
+    "turn_expectations": [
+      {
+        "turn": 0,
+        "intent": "other",
+        "allowed_intents": ["other", "technical", "query"],
+        "routing": {"primary": "general", "required_supporting": [], "allowed_supporting": ["technical"]},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": [], "forbidden": []},
+        "reference_facts": ["缺少失败对象、环境和错误信息时不能判断是否权限问题"],
+        "must_include": ["说明当前信息不足", "询问失败对象、环境、错误码和影响范围"],
+        "must_not_include": ["直接断言权限问题", "输出与问题无关的完整排障清单"]
+      },
+      {
+        "turn": 1,
+        "intent": "api_integration",
+        "routing": {"primary": "api", "required_supporting": [], "allowed_supporting": ["enterprise", "technical"]},
+        "escalation": "not_required",
+        "tools": {"required_all": [], "required_any": ["lookup_error_code", "validate_api_request_shape"], "forbidden": []},
+        "reference_facts": ["生产 /v1/chat 的 403 应检查 workspace、资源权限、IP 白名单、套餐权限和接口开通", "不能声称已读取后台权限"],
+        "must_include": ["利用生产、/v1/chat、403 和 ws_prod_9", "给出授权方向的验证步骤"],
+        "must_not_include": ["重复询问已提供的信息", "断言权限配置已经错误"]
+      }
+    ],
+    "conversation_expectations": {
+      "state_progression": ["从模糊澄清推进到具体 API 403 排查"],
+      "context_retention": ["第二轮使用用户给出的全部关键字段"],
+      "resolution": ["形成可验证的权限与套餐检查步骤"]
+    },
+    "source_refs": ["skills/general-triage/SKILL.md", "skills/api-access-auth/SKILL.md"]
+  }
+]

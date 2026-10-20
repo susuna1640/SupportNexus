@@ -133,14 +133,15 @@ Swagger 是完整且实时的接口契约。以下为常用入口：
 | 类别 | 接口 | 用途 |
 | --- | --- | --- |
 | 运行状态 | `GET /health`、`GET /monitor`、`GET /metrics` | 健康检查、运行摘要和 Prometheus 指标 |
-| 对话 | `POST /chat` | 触发记忆、意图识别、路由、Agent 执行和记忆回写 |
+| 对话 | `POST /chat` | 兼容的完整 JSON 响应；触发记忆、意图识别、路由、Agent 执行和记忆回写 |
+| 流式对话 | `POST /chat/stream` | SSE：推送安全的处理阶段、路由/工具状态、回答文本增量和最终结果 |
 | Skills | `GET /skills`、`POST /skills/reload` | 查看或热重载业务规则 |
 | 工具追踪 | `GET /trace/tool/{request_id}`、`GET /trace/tools` | 查看某次或近期请求的工具调用 |
 | RAG 检索 | `POST /search`、`POST /search/baseline` | 对比优化链路与单路向量基线 |
 | 知识库 | `POST /knowledge/add`、`POST /knowledge/upload`、`GET /knowledge/stats` | 添加、上传与查看知识库 |
 | 知识库维护 | `GET /knowledge/chunks`、`DELETE /knowledge/chunks?title=...` | 查看或按标题删除文本块 |
 | 初始化 | `POST /knowledge/seed-defaults` | 向空知识库导入内置示例 |
-| 质量评测 | `POST /eval/run` | 运行意图与端到端质量评测 |
+| 质量评测 | `POST /eval/run` | 默认运行正式 E2E v1（意图、路由、工具、交接、安全、回复质量和多轮承接）；可显式传 `{"suite":"legacy"}` 运行旧版样例 |
 
 `POST /knowledge/upload` 支持 `.txt`、`.md` 与 JSON 文档数组，单文件上限为 10 MB。`DELETE /knowledge/chunks/all?confirm=true` 会清空全部知识库文本块，应仅在确认数据可丢弃时调用。
 
@@ -157,6 +158,7 @@ Swagger 是完整且实时的接口契约。以下为常用入口：
 | RAG 重排 | `DASHSCOPE_RERANK_ENDPOINT`、`SUPPORT_NEXUS_RAG_RERANK_MODEL` | 可选指定 Qwen 重排端点与模型 |
 | Langfuse | `LANGFUSE_BASE_URL`、`LANGFUSE_PUBLIC_KEY`、`LANGFUSE_SECRET_KEY`、`LANGFUSE_TRACING_ENABLED` | 配齐密钥后启用链路观测；可设为 `false` 关闭 |
 | 内容采集 | `LANGFUSE_CAPTURE_CONTENT=false` | 只保留结构化观测，不上传消息、Prompt、工具结果和回答正文 |
+| 正式 E2E 评测 | `EVAL_E2E_CASES_PATH`、`EVAL_E2E_RUBRIC_PATH`、`EVAL_BASELINE_PATH` | 可覆盖随镜像提供的用例/rubric 路径与持久化基线路径 |
 
 未配置 DashScope，或远程 Embedding 调用失败时，意图识别会退化为本地 256 维字符 n-gram 哈希向量；可使用 `SUPPORT_NEXUS_INTENT_EMBEDDING_STRICT=true` 改为严格报错。未配置重排服务时，RAG 仍会返回混合召回结果，并保留 RRF 排序。
 
@@ -167,10 +169,11 @@ Swagger 是完整且实时的接口契约。以下为常用入口：
 | Redis | 当前活跃阶段的工作记忆（逻辑空闲阈值 24h，结算前保留宽限） | 由 Redis 服务配置 |
 | ChromaDB | 知识库与已结算会话阶段的情景摘要 | 由 ChromaDB 服务配置 |
 | `data/user_memories/` | 长期用户事实 | 本地目录 |
-| `data/eval/` | 评测基线与数据集 | 本地目录 |
+| `data/eval/e2e_quality_*_v1.json` | 版本化的正式端到端数据集与 rubric | 随后端镜像提供 |
+| `data/eval/runs/` | 评测基线与运行结果 | Docker named volume（本地运行时可由 `EVAL_BASELINE_PATH` 覆盖） |
 
 - API 默认允许跨域请求。若部署到公网，请在反向代理或应用层收紧来源、认证、限流和 TLS 配置。
-- `/eval/run` 会执行模型调用，可能产生费用和一定耗时；建议在隔离的评测数据与预算下运行。
+- `/eval/run` 默认执行 40 条正式 E2E 用例及多轮承接检查，会执行模型调用，可能产生费用和一定耗时；建议在隔离的评测数据与预算下运行。需要临时运行旧的 12 条意图样例与 5 组对话样例时，请传 `{"suite":"legacy"}`。
 - 工具不会伪造支付、订单、合同或权限系统的读写结果。需要真实业务动作时，应在经过认证、授权和审计的集成层实现。
 
 ## 本地开发与测试

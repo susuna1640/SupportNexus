@@ -24,8 +24,15 @@ node_modules/
 dist/
 build/
 
-# Local application state and generated evaluation artifacts
+# Local application state and generated evaluation artifacts. The formal SupportNexus
+# E2E fixtures are source-controlled inputs, while its runtime output remains ignored.
 data/
+!SupportNexus/data/
+SupportNexus/data/*
+!SupportNexus/data/eval/
+SupportNexus/data/eval/*
+!SupportNexus/data/eval/e2e_quality_cases_v1.json
+!SupportNexus/data/eval/e2e_quality_rubric_v1.json
 logs/
 outputs/
 *.sqlite3

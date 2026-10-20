@@ -6,7 +6,9 @@
 # 本地运行状态：应由后续的 Docker volume 或外部服务持久化。
 data/chroma/
 data/user_memories/
-data/eval/
+data/eval/*
+!data/eval/e2e_quality_cases_v1.json
+!data/eval/e2e_quality_rubric_v1.json
 logs/
 outputs/
 *.sqlite3

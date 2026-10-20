@@ -1,6 +1,6 @@
 # SupportNexus：面向 B2B SaaS 客服与运营支持的多 Agent 编排平台
 
-这是 **SupportNexus：面向 B2B SaaS 客服与运营支持的多 Agent 编排平台** 的 Vue 前端工作台。它用于发起和调试客户问题，并将后端实际返回的意图、领域分数、Agent 路由、知识库命中与运行信息集中展示。
+这是 **SupportNexus：面向 B2B SaaS 客服与运营支持的多 Agent 编排平台** 的 React 前端工作台。它用于发起和调试客户问题，并将后端实际返回的意图、领域分数、Agent 路由、知识库命中与运行信息集中展示。
 
 ## 适用场景
 
@@ -37,7 +37,8 @@ Python 后端默认地址为 `http://localhost:8000`。
 | 方法 | 接口 | 用途 |
 | --- | --- | --- |
 | `GET` | `/health` | 健康检查 |
-| `POST` | `/chat` | 发送客服问题；请求体包含 `message`、`user_id`、可选的 `conv_id` |
+| `POST` | `/chat` | 兼容的非流式对话；请求体包含 `message`、`user_id`、可选的 `conv_id` |
+| `POST` | `/chat/stream` | 默认聊天通道；以 SSE 实时返回安全处理阶段、工具状态、回答增量和最终元数据 |
 | `GET` | `/monitor` | 读取监控摘要 |
 | `GET` / `POST` | `/skills`、`/skills/reload` | 查看或重新加载 Skills |
 | `GET` | `/knowledge/stats` | 查询知识库统计 |
