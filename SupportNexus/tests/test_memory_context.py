@@ -260,3 +260,52 @@ def test_completed_turn_requests_a_review_every_five_turns():
 
     assert due == [False, False, False, False, True, False, False, False, False, True]
     assert len(manager._redis.expirations) == 10
+
+
+def test_conversation_transcript_preserves_visible_history_after_working_memory_changes():
+    class FakeRedis:
+        def __init__(self):
+            self.values = {}
+            self.lists = {}
+            self.expirations = []
+
+        async def set(self, key, value, nx=False):
+            if nx and key in self.values:
+                return False
+            self.values[key] = value
+            return True
+
+        async def expire(self, key, seconds):
+            self.expirations.append((key, seconds))
+
+        async def lpush(self, key, value):
+            self.lists.setdefault(key, []).insert(0, value)
+
+        async def rpush(self, key, value):
+            self.lists.setdefault(key, []).append(value)
+
+        async def lrange(self, key, _start, _end):
+            return list(self.lists.get(key, []))
+
+    manager = MemoryManager.__new__(MemoryManager)
+    manager._redis = FakeRedis()
+
+    async def add_and_read():
+        await manager.add_message("u1", "c1", MsgRole.USER, "第一条问题")
+        await manager.add_message("u1", "c1", MsgRole.ASSISTANT, "第一条回复")
+        await manager.add_message("u1", "c1", MsgRole.USER, "第二条问题")
+        # 模拟模型上下文压缩后工作记忆被裁剪。
+        manager._redis.lists[manager._wm_key("u1", "c1")] = []
+        return await manager.get_conversation_transcript("u1", "c1")
+
+    transcript = asyncio.run(add_and_read())
+
+    assert [(message.role, message.content) for message in transcript] == [
+        (MsgRole.USER, "第一条问题"),
+        (MsgRole.ASSISTANT, "第一条回复"),
+        (MsgRole.USER, "第二条问题"),
+    ]
+    assert (
+        manager._transcript_key("u1", "c1"),
+        manager.CONVERSATION_TRANSCRIPT_RETENTION_SECONDS,
+    ) in manager._redis.expirations

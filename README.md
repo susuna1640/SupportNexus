@@ -157,7 +157,7 @@ npm install
 npm run dev
 ```
 
-访问 `http://localhost:5173`。开发服务器会将 `/api/python` 代理到服务端；也可以通过 `VITE_PYTHON_API_URL` 覆盖后端地址。
+访问 `http://localhost:5173`。开发服务器会将 `/api/python` 代理到服务端；可通过 `VITE_PYTHON_API_PROXY_TARGET` 覆盖 Vite 访问的后端地址。浏览器端保持请求 `/api/python`，因此 Docker 内网服务名不会泄露到浏览器。
 
 ## 当前运行边界
 

@@ -117,6 +117,8 @@ class MemoryManager:
     USER_MEMORY_REVIEW_SOURCE_MAX_CHARS = 12000
     SESSION_IDLE_TTL_SECONDS = 86400
     SESSION_REDIS_RETENTION_SECONDS = 7 * 86400
+    # UI 会话转录与模型工作记忆有不同用途：前者不能随上下文压缩被裁剪。
+    CONVERSATION_TRANSCRIPT_RETENTION_SECONDS = SESSION_REDIS_RETENTION_SECONDS
     _USER_MEMORY_ID_RE = re.compile(r"m_(\d+)$")
 
     USER_MEMORY_REVIEW_SYSTEM_PROMPT = """You maintain durable user memories for a customer-support assistant.
@@ -219,13 +221,22 @@ If nothing is worth saving, return exactly: Nothing to save"""
         msg = Message(role=role, content=self._safe_text(content), metadata=clean_metadata)
         key = self._wm_key(user_id, conv_id)
 
-        # 追加到 Redis 列表（左推，最新在前）
-        await self._redis.lpush(key, json.dumps({
+        serialized = json.dumps({
             "role":      msg.role.value,
             "content":   msg.content,
             "ts":        msg.timestamp.isoformat(),
             "metadata":  msg.metadata,
-        }))
+        })
+
+        # 工作记忆左推，最新在前；供模型上下文构建与压缩使用。
+        await self._redis.lpush(key, serialized)
+        # UI 转录右推，天然保持时序，且不会被工作记忆压缩或会话归档清理。
+        transcript_key = self._transcript_key(user_id, conv_id)
+        await self._redis.rpush(transcript_key, serialized)
+        await self._redis.expire(
+            transcript_key,
+            self.CONVERSATION_TRANSCRIPT_RETENTION_SECONDS,
+        )
         await self._touch_session(user_id, conv_id, msg.timestamp)
 
         # 压缩由 Agent 调用前的上下文预算检查触发。这样不会只因为消息条数
@@ -338,6 +349,21 @@ If nothing is worth saving, return exactly: Nothing to save"""
             user_memories=user_memories,
             summary=summary,
         )
+
+    async def get_conversation_transcript(
+        self,
+        user_id: str,
+        conv_id: str,
+    ) -> List[Message]:
+        """读取按时间排序的 UI 会话转录，不触发工作记忆结算或压缩。"""
+        user_id = self._safe_text(user_id)
+        conv_id = self._safe_text(conv_id)
+        raws = await self._redis.lrange(self._transcript_key(user_id, conv_id), 0, -1)
+        if raws:
+            return self._decode_messages(raws)
+
+        # 升级前的会话没有独立转录；只要工作记忆仍在，仍可恢复可见记录。
+        return await self._get_working_memory(user_id, conv_id)
 
     # ── 压缩（当前会话状态）───────────────────────────────────────────────────
 
@@ -621,8 +647,12 @@ If nothing is worth saving, return exactly: Nothing to save"""
     async def _get_working_memory(self, user_id: str, conv_id: str) -> List[Message]:
         key  = self._wm_key(user_id, conv_id)
         raws = await self._redis.lrange(key, 0, -1)
+        return self._decode_messages(reversed(raws))  # Redis lpush 最新在前，反转后还原时序
+
+    @staticmethod
+    def _decode_messages(raws: Any) -> List[Message]:
         msgs = []
-        for raw in reversed(raws):  # Redis lpush 最新在前，reversed 还原时序
+        for raw in raws:
             d = json.loads(raw)
             msgs.append(Message(
                 role=MsgRole(d["role"]),
@@ -829,6 +859,10 @@ If nothing is worth saving, return exactly: Nothing to save"""
     @staticmethod
     def _wm_key(user_id: str, conv_id: str) -> str:
         return f"wm:{user_id}:{conv_id}"
+
+    @staticmethod
+    def _transcript_key(user_id: str, conv_id: str) -> str:
+        return f"transcript:{user_id}:{conv_id}"
 
     @staticmethod
     def _summary_key(user_id: str, conv_id: str) -> str:

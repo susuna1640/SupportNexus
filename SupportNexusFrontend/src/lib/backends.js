@@ -2,7 +2,8 @@ const DEFAULT_BACKENDS = {
   python: {
     id: 'python',
     label: 'Python',
-    baseUrl: import.meta.env.VITE_PYTHON_API_URL || '/api/python',
+    // 浏览器只能访问公开地址或同源路径；Docker 服务名仅供 Vite 代理使用。
+    baseUrl: import.meta.env.VITE_PYTHON_API_PUBLIC_URL || '/api/python',
     port: '8000'
   }
 }
@@ -49,6 +50,18 @@ export async function reloadSkills(type, settings) {
 
 export async function requestKnowledgeStats(type, settings) {
   return requestJson(backendMeta(type, settings).baseUrl, '/knowledge/stats')
+}
+
+export async function requestConversationHistory(type, settings) {
+  const conversationId = String(settings.conversationId || '').trim()
+  if (!conversationId) return []
+  const userId = String(settings.userId || 'anonymous').trim() || 'anonymous'
+  const params = new URLSearchParams({ user_id: userId })
+  const data = await requestJson(
+    backendMeta(type, settings).baseUrl,
+    `/conversations/${encodeURIComponent(conversationId)}/messages?${params}`
+  )
+  return Array.isArray(data.messages) ? data.messages : []
 }
 
 export async function runEvaluation(type, settings, body = null) {

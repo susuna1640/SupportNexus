@@ -6,6 +6,7 @@ import {
   createInitialSettings,
   reloadSkills,
   requestChatStream,
+  requestConversationHistory,
   requestHealth,
   requestKnowledgeStats,
   requestMonitor,
@@ -69,6 +70,7 @@ export default function App() {
   const sidebarRef = useRef(null)
   const toastTimerRef = useRef(null)
   const messageSequenceRef = useRef(0)
+  const restoredConversationKeyRef = useRef('')
 
   const currentBackend = useMemo(() => backendMeta(settings.backend, settings), [settings])
   const docsUrl = `${currentBackend.baseUrl}/docs`
@@ -100,6 +102,40 @@ export default function App() {
       clearTimeout(toastTimerRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    const conversationId = String(settings.conversationId || '').trim()
+    const userId = String(settings.userId || 'anonymous').trim() || 'anonymous'
+    if (!conversationId) {
+      restoredConversationKeyRef.current = ''
+      return undefined
+    }
+
+    const key = `${userId}:${conversationId}`
+    if (restoredConversationKeyRef.current === key) return undefined
+    let cancelled = false
+
+    async function restoreConversation() {
+      try {
+        const history = await requestConversationHistory(settings.backend, settings)
+        if (cancelled) return
+        setMessages(history.map((message, index) => ({
+          id: `history-${message.timestamp || index}-${message.role || 'unknown'}-${index}`,
+          role: message.role === 'assistant' ? 'assistant' : 'user',
+          content: message.content || ''
+        })))
+        // 仅在请求完成后标记为已恢复。开发模式下 Strict Mode 会先清理一次
+        // effect；若提前标记，第二次 effect 会被跳过，导致刷新后空白。
+        restoredConversationKeyRef.current = key
+        requestAnimationFrame(scrollMessagesToBottom)
+      } catch {
+        if (!cancelled) showToast('会话记录恢复失败')
+      }
+    }
+
+    restoreConversation()
+    return () => { cancelled = true }
+  }, [settings.backend, settings.conversationId, settings.endpoints.python, settings.userId])
 
   function updateSettings(key, value) {
     setSettings((previous) => {
@@ -207,7 +243,10 @@ export default function App() {
           requestAnimationFrame(scrollMessagesToBottom)
         }
       })
-      if (response.conversationId && !settings.conversationId) updateSettings('conversationId', response.conversationId)
+      if (response.conversationId && !settings.conversationId) {
+        restoredConversationKeyRef.current = `${settings.userId || 'anonymous'}:${response.conversationId}`
+        updateSettings('conversationId', response.conversationId)
+      }
       setLastResponse(response)
       setLastTrace(trace)
       const meta = [
@@ -251,6 +290,7 @@ export default function App() {
     setMessages([])
     setLastResponse(null)
     setLastTrace(null)
+    restoredConversationKeyRef.current = ''
     updateSettings('conversationId', '')
   }
 
@@ -320,7 +360,6 @@ export default function App() {
         <nav className="view-nav" aria-label="工作区">
           <button className={activeView === 'chat' ? 'active' : ''} onClick={() => setActiveView('chat')}>对话</button>
           <button className={activeView === 'knowledge' ? 'active' : ''} onClick={() => setActiveView('knowledge')}>知识库</button>
-          <button className={activeView === 'evaluation' ? 'active' : ''} onClick={() => setActiveView('evaluation')}>评测</button>
         </nav>
         <div className="topbar-tools">
           <span className="environment-pill"><i className={healthOk ? 'online' : 'offline'} />{currentBackend.label}</span>
@@ -334,7 +373,7 @@ export default function App() {
       {activeView === 'chat' && (
         <section className="page page-chat">
           <div className="page-heading">
-            <div className="heading-copy"><span className="kicker">SupportNexus</span><h1>SupportNexus：面向 B2B SaaS 客服与运营支持的多 Agent 编排平台</h1><p>面向开发者和企业客户，验证请求分析、知识检索与专业 Agent 主辅协同。</p></div>
+            <div className="heading-copy"><span className="kicker">SupportNexus</span><h1>SupportNexus</h1><p>B2B SaaS 客服 Agent 工作台。</p></div>
             <div className="heading-actions"><span className="session-label">{settings.conversationId || '新会话'}</span><button className="quiet-button" onClick={clearConversation}>清空</button></div>
           </div>
           <div className="chat-layout">

@@ -253,6 +253,17 @@ class ChatResponse(BaseModel):
     domain_scores: Dict[str, float] = Field(default_factory=dict)
 
 
+class ConversationMessageResponse(BaseModel):
+    role: str
+    content: str
+    timestamp: str
+
+
+class ConversationHistoryResponse(BaseModel):
+    conv_id: str
+    messages: List[ConversationMessageResponse] = Field(default_factory=list)
+
+
 class ToolTraceResponse(BaseModel):
     request_id: str
     found: bool
@@ -571,6 +582,25 @@ async def chat_stream(req: ChatRequest):
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+@app.get("/conversations/{conv_id}/messages", response_model=ConversationHistoryResponse)
+async def get_conversation_history(conv_id: str, user_id: str):
+    """恢复当前用户指定会话的可见问答记录。"""
+    if _memory is None:
+        raise HTTPException(503, "服务未就绪")
+    messages = await _memory.get_conversation_transcript(user_id, conv_id)
+    return ConversationHistoryResponse(
+        conv_id=conv_id,
+        messages=[
+            ConversationMessageResponse(
+                role=message.role.value,
+                content=message.content,
+                timestamp=message.timestamp.isoformat(),
+            )
+            for message in messages
+        ],
     )
 
 

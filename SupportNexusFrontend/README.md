@@ -71,12 +71,14 @@ npm run dev
 http://localhost:5173
 ```
 
-如果后端端口不是默认值，可以在启动时覆盖：
+如果开发服务器需要代理到其他后端地址，可以在启动时覆盖代理目标：
 
 ```bash
-VITE_PYTHON_API_URL=http://localhost:8000 \
+VITE_PYTHON_API_PROXY_TARGET=http://localhost:8000 \
 npm run dev
 ```
+
+浏览器默认始终请求同源路径 `/api/python`。只有后端有一个浏览器可直接访问的公开地址、且不希望经过 Vite 代理时，才设置 `VITE_PYTHON_API_PUBLIC_URL`。
 
 ## 后端启动参考
 
