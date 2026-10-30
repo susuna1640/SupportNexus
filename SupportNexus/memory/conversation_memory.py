@@ -28,6 +28,7 @@ import chromadb
 import redis.asyncio as redis
 from anthropic import AsyncAnthropic
 
+from core.chroma_embeddings import StableHashEmbeddingFunction
 from core.llm_utils import extract_text_content
 from core.observability import capture, observation, update, usage_details
 
@@ -198,8 +199,11 @@ If nothing is worth saving, return exactly: Nothing to save"""
                 settings=chromadb.Settings(anonymized_telemetry=False),
             )
 
-        # 情景记忆：存储历史对话片段
-        self._episodic = chroma.get_or_create_collection("episodic")
+        # 情景记忆：显式禁用 Chroma 默认 MiniLM 下载，存储历史对话片段。
+        self._episodic = chroma.get_or_create_collection(
+            "episodic",
+            embedding_function=StableHashEmbeddingFunction(),
+        )
 
     # ── 写入 ──────────────────────────────────────────────────────────────────
 

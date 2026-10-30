@@ -19,6 +19,8 @@ import re
 from collections import Counter
 from typing import Any, Dict, List, Optional
 
+from core.chroma_embeddings import StableHashEmbeddingFunction
+
 try:
     import chromadb
 except ModuleNotFoundError:
@@ -67,11 +69,12 @@ class KnowledgeBase:
                 settings=chromadb.Settings(anonymized_telemetry=False),
             )
 
-        # 使用服务端时不传 embedding_function，让服务端处理
-        # 本地模式时也不传，使用 ChromaDB 默认的（会触发模型下载）
+        # Chroma Python 客户端的默认嵌入器会在首次 add/query 时下载 MiniLM
+        # 权重；显式传入应用内嵌入器，确保离线/受限网络下也不会卡住请求。
         self._collection = self._client.get_or_create_collection(
             name=self.COLLECTION_NAME,
             metadata={"description": "SupportNexus RAG 知识库"},
+            embedding_function=StableHashEmbeddingFunction(),
         )
         self._bm25_doc_count = -1
         self._bm25_documents: List[Dict[str, Any]] = []
@@ -107,7 +110,7 @@ class KnowledgeBase:
                 metas.append({"title": title, "chunk_index": i, "total_chunks": len(chunks)})
 
         if ids:
-            # ChromaDB 会自动生成 Embedding
+            # 使用显式、无网络依赖的嵌入器，避免 Chroma 的默认模型下载。
             self._collection.add(ids=ids, documents=docs, metadatas=metas)
             self._invalidate_bm25_index()
             logger.info(f"知识库导入 {len(ids)} 个文档片段")
@@ -122,7 +125,7 @@ class KnowledgeBase:
         """
         语义检索：根据 query 返回最相关的文档片段。
 
-        ChromaDB 内部自动将 query 转为向量，与存储的文档向量做余弦相似度匹配。
+        由显式嵌入器将 query 转为向量，再与文档向量做余弦距离匹配。
         """
         results = self._collection.query(
             query_texts=[query],
